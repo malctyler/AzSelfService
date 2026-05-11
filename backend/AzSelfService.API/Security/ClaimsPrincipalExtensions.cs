@@ -4,6 +4,17 @@ namespace AzSelfService.API.Security;
 
 public static class ClaimsPrincipalExtensions
 {
+    public static string GetRequiredUsername(this ClaimsPrincipal principal)
+    {
+        var username = principal.FindFirstValue("username") ?? principal.Identity?.Name;
+        return !string.IsNullOrWhiteSpace(username)
+            ? username
+            : throw new UnauthorizedAccessException("Username claim not found.");
+    }
+
+    public static bool IsAdminUser(this ClaimsPrincipal principal)
+        => string.Equals(principal.GetRequiredUsername(), "admin", StringComparison.OrdinalIgnoreCase);
+
     public static Guid GetRequiredUserId(this ClaimsPrincipal principal)
     {
         var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");

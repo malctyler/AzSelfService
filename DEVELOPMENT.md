@@ -189,6 +189,36 @@ AzSelfService/
 
 ## Development Workflow
 
+### Azure Bootstrap for Secure Secrets
+
+When preparing a real Azure environment, use the PowerShell helpers in `scripts/` instead of writing secrets into `.env` files or the database.
+
+```powershell
+# Create the bootstrap RG and RBAC-enabled Key Vault
+.\scripts\bootstrap-keyvault.ps1 `
+  -CredentialClixmlPath 'C:\Users\malcolm.COTTAGES\CredentialStore\PROD-Automation.clixml' `
+  -TenantId 'bf0465f4-f8c0-4ff4-978d-af5315afa795' `
+  -SubscriptionId '5b337264-50ba-4056-bc9f-1a926a433c18' `
+  -ResourceGroupName 'rg-azselfservice-bootstrap' `
+  -KeyVaultName 'azselfservicebootstrapkv' `
+  -SecretName 'starting-secret'
+
+# Point the platform customer record at the client-secret Key Vault reference
+.\scripts\set-customer-keyvault-refs.ps1 `
+  -SubscriptionId '5b337264-50ba-4056-bc9f-1a926a433c18' `
+  -KeyVaultName 'azselfservicebootstrapkv'
+```
+
+Populate this customer secret in Key Vault before allowing deployments:
+
+- `customers/{customer_id}/sp-client-secret`
+
+Set the secret content type to include the SP app id:
+
+- `appid={service-principal-app-id}`
+
+Tenant and subscription are read from customer metadata (`tenant_id`, `subscription_id`).
+
 ### Starting Development
 
 ```bash

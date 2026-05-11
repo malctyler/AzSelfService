@@ -1,27 +1,40 @@
-using System;
-using System.Threading.Tasks;
+using AzSelfService.Worker.Data;
+using AzSelfService.Worker.Services;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-namespace AzSelfService.Worker;
+var builder = Host.CreateApplicationBuilder(args);
 
-class Program
+builder.Services.Configure<WorkerOptions>(options =>
 {
-    static async Task Main(string[] args)
+    options.PollIntervalMs = builder.Configuration.GetValue<int?>("WORKER_POLL_INTERVAL_MS") ?? 5000;
+    options.MaxRetries = builder.Configuration.GetValue<int?>("WORKER_MAX_RETRIES") ?? 3;
+    options.BatchSize = builder.Configuration.GetValue<int?>("WORKER_BATCH_SIZE") ?? 5;
+    options.SecretExpiryWarningDays = builder.Configuration.GetValue<int?>("WORKER_SECRET_EXPIRY_WARNING_DAYS") ?? 30;
+});
+
+builder.Services.AddSingleton(_ =>
+{
+    var keyVaultUrl = builder.Configuration["Azure:KeyVault:Url"];
+
+    if (string.IsNullOrWhiteSpace(keyVaultUrl))
     {
-        Console.WriteLine("🚀 AzSelfService Worker");
-        Console.WriteLine("======================");
-        Console.WriteLine("");
-        Console.WriteLine("✓ Worker service started");
-        Console.WriteLine("✓ Placeholder for Terraform job processing (Phase 3+)");
-        Console.WriteLine("");
-        Console.WriteLine("Worker will poll for jobs every 5 seconds...");
-        Console.WriteLine("Press Ctrl+C to stop");
-        Console.WriteLine("");
-        
-        // Simple keep-alive loop for testing
-        while (true)
-        {
-            await Task.Delay(5000);
-            // TODO: Poll job queue and process Terraform jobs (Phase 3)
-        }
+        throw new InvalidOperationException("Azure:KeyVault:Url must be configured for worker credential resolution.");
     }
-}
+
+    return new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential());
+});
+
+builder.Services.AddSingleton<ServicePrincipalCredentialProvider>();
+
+builder.Services.AddDbContext<WorkerDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddHostedService<DeploymentProcessor>();
+
+var host = builder.Build();
+await host.RunAsync();

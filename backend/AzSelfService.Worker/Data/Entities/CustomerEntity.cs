@@ -1,4 +1,4 @@
-namespace AzSelfService.API.Data.Entities;
+namespace AzSelfService.Worker.Data.Entities;
 
 public sealed class CustomerEntity
 {
@@ -10,10 +10,5 @@ public sealed class CustomerEntity
     public string? SpClientSecretSecretRef { get; set; }
     public string? SpTenantIdSecretRef { get; set; }
     public string? SpSubscriptionIdSecretRef { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
     public bool IsActive { get; set; }
-
-    public ICollection<UserEntity> Users { get; set; } = new List<UserEntity>();
-    public ICollection<DeploymentEntity> Deployments { get; set; } = new List<DeploymentEntity>();
 }

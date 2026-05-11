@@ -1,6 +1,9 @@
 using System.Text;
 using AzSelfService.API.Data;
 using AzSelfService.API.Security;
+using AzSelfService.API.Services;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -14,6 +17,13 @@ builder.Services.AddDbContext<AzSelfServiceDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddScoped<CustomerCredentialPreflightService>();
+
+var keyVaultUrl = builder.Configuration["Azure:KeyVault:Url"];
+if (!string.IsNullOrWhiteSpace(keyVaultUrl))
+{
+    builder.Services.AddSingleton(_ => new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential()));
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

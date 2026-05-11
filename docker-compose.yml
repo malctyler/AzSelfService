@@ -38,8 +38,11 @@ services:
       - JWT__Issuer=${JWT_ISSUER:-https://azselfservice.example.com}
       - JWT__Audience=${JWT_AUDIENCE:-azselfservice-api}
       - JWT__ExpirationHours=${JWT_EXPIRATION_HOURS:-24}
-      - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-az-selfservice-kv}
-      - Azure__KeyVault__Url=${AZURE_KEYVAULT_URL:-https://az-selfservice-kv.vault.azure.net/}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-azselfservice-1338-kv}
+      - Azure__KeyVault__Url=${AZURE_KEYVAULT_URL:-https://azselfservice-1338-kv.vault.azure.net/}
       - Azure__Storage__AccountName=${AZURE_STORAGE_ACCOUNT_NAME:-tfstate12345}
       - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-tfstate}
       - TerraformConfig__ModulesPath=${TERRAFORM_MODULES_PATH:-./terraform-modules}
@@ -94,7 +97,11 @@ services:
       - DOTNET_RUNNING_IN_CONTAINER=true
       - ConnectionStrings__DefaultConnection=Server=postgres;Port=5432;Database=${DB_NAME:-azselfservice};User Id=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres_dev_password_123!};
       - JWT__Secret=${JWT_SECRET:-your-super-secret-jwt-key-min-32-characters-long-for-prod}
-      - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-az-selfservice-kv}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-azselfservice-1338-kv}
+      - Azure__KeyVault__Url=${AZURE_KEYVAULT_URL:-https://azselfservice-1338-kv.vault.azure.net/}
       - Azure__Storage__AccountName=${AZURE_STORAGE_ACCOUNT_NAME:-tfstate12345}
       - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-tfstate}
       - TerraformConfig__ModulesPath=${TERRAFORM_MODULES_PATH:-./terraform-modules}
@@ -102,6 +109,8 @@ services:
       - Logging__LogLevel__Default=Debug
       - WORKER_POLL_INTERVAL_MS=5000
       - WORKER_MAX_RETRIES=3
+      - WORKER_BATCH_SIZE=5
+      - WORKER_SECRET_EXPIRY_WARNING_DAYS=30
     ports:
       - "5001:5001"
     volumes:

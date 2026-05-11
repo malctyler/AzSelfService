@@ -1,14 +1,13 @@
-using AzSelfService.API.Data.Entities;
+using AzSelfService.Worker.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace AzSelfService.API.Data;
+namespace AzSelfService.Worker.Data;
 
-public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbContext> options) : DbContext(options)
+public sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options) : DbContext(options)
 {
     public DbSet<CustomerEntity> Customers => Set<CustomerEntity>();
-    public DbSet<UserEntity> Users => Set<UserEntity>();
-    public DbSet<ModuleEntity> Modules => Set<ModuleEntity>();
     public DbSet<DeploymentEntity> Deployments => Set<DeploymentEntity>();
+    public DbSet<ModuleEntity> Modules => Set<ModuleEntity>();
     public DbSet<DeploymentInputEntity> DeploymentInputs => Set<DeploymentInputEntity>();
     public DbSet<DeploymentOutputEntity> DeploymentOutputs => Set<DeploymentOutputEntity>();
     public DbSet<DeploymentLogEntity> DeploymentLogs => Set<DeploymentLogEntity>();
@@ -27,45 +26,7 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.SpClientSecretSecretRef).HasColumnName("sp_client_secret_secret_ref").HasMaxLength(1024);
             entity.Property(x => x.SpTenantIdSecretRef).HasColumnName("sp_tenant_id_secret_ref").HasMaxLength(1024);
             entity.Property(x => x.SpSubscriptionIdSecretRef).HasColumnName("sp_subscription_id_secret_ref").HasMaxLength(1024);
-            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
-            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             entity.Property(x => x.IsActive).HasColumnName("is_active");
-        });
-
-        modelBuilder.Entity<UserEntity>(entity =>
-        {
-            entity.ToTable("users");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Id).HasColumnName("id");
-            entity.Property(x => x.CustomerId).HasColumnName("customer_id");
-            entity.Property(x => x.Username).HasColumnName("username").HasMaxLength(255);
-            entity.Property(x => x.PasswordHash).HasColumnName("password_hash").HasMaxLength(255);
-            entity.Property(x => x.Email).HasColumnName("email").HasMaxLength(255);
-            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
-            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            entity.Property(x => x.IsActive).HasColumnName("is_active");
-
-            entity.HasOne(x => x.Customer)
-                .WithMany(x => x.Users)
-                .HasForeignKey(x => x.CustomerId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<ModuleEntity>(entity =>
-        {
-            entity.ToTable("modules");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Id).HasColumnName("id");
-            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(255);
-            entity.Property(x => x.Version).HasColumnName("version").HasMaxLength(50);
-            entity.Property(x => x.TerraformPath).HasColumnName("terraform_path").HasMaxLength(512);
-            entity.Property(x => x.Schema).HasColumnName("schema").HasColumnType("jsonb");
-            entity.Property(x => x.UiSchema).HasColumnName("ui_schema").HasColumnType("jsonb");
-            entity.Property(x => x.Description).HasColumnName("description");
-            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
-            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            entity.Property(x => x.IsPublished).HasColumnName("is_published");
-            entity.Property(x => x.IsDeprecated).HasColumnName("is_deprecated");
         });
 
         modelBuilder.Entity<DeploymentEntity>(entity =>
@@ -84,20 +45,26 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             entity.Property(x => x.CompletedAt).HasColumnName("completed_at");
 
-            entity.HasOne(x => x.Customer)
-                .WithMany(x => x.Deployments)
-                .HasForeignKey(x => x.CustomerId)
-                .OnDelete(DeleteBehavior.Cascade);
-
             entity.HasOne(x => x.Module)
-                .WithMany(x => x.Deployments)
+                .WithMany()
                 .HasForeignKey(x => x.ModuleId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(x => x.RequestedByUser)
-                .WithMany(x => x.RequestedDeployments)
-                .HasForeignKey(x => x.RequestedBy)
-                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(x => x.Input)
+                .WithOne(x => x.Deployment)
+                .HasForeignKey<DeploymentInputEntity>(x => x.DeploymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ModuleEntity>(entity =>
+        {
+            entity.ToTable("modules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(255);
+            entity.Property(x => x.Version).HasColumnName("version").HasMaxLength(50);
+            entity.Property(x => x.IsPublished).HasColumnName("is_published");
+            entity.Property(x => x.IsDeprecated).HasColumnName("is_deprecated");
         });
 
         modelBuilder.Entity<DeploymentInputEntity>(entity =>
@@ -108,11 +75,6 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.DeploymentId).HasColumnName("deployment_id");
             entity.Property(x => x.Inputs).HasColumnName("inputs").HasColumnType("jsonb");
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(x => x.Deployment)
-                .WithOne(x => x.Input)
-                .HasForeignKey<DeploymentInputEntity>(x => x.DeploymentId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeploymentOutputEntity>(entity =>
@@ -123,11 +85,6 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.DeploymentId).HasColumnName("deployment_id");
             entity.Property(x => x.Outputs).HasColumnName("outputs").HasColumnType("jsonb");
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(x => x.Deployment)
-                .WithOne(x => x.Output)
-                .HasForeignKey<DeploymentOutputEntity>(x => x.DeploymentId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeploymentLogEntity>(entity =>
@@ -140,11 +97,6 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.Level).HasColumnName("level").HasMaxLength(20);
             entity.Property(x => x.Message).HasColumnName("message");
             entity.Property(x => x.Context).HasColumnName("context").HasColumnType("jsonb");
-
-            entity.HasOne(x => x.Deployment)
-                .WithMany(x => x.Logs)
-                .HasForeignKey(x => x.DeploymentId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

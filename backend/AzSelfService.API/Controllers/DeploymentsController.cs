@@ -3,6 +3,7 @@ using AzSelfService.API.Contracts;
 using AzSelfService.API.Data;
 using AzSelfService.API.Data.Entities;
 using AzSelfService.API.Security;
+using AzSelfService.API.Services;
 using AzSelfService.API.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,7 +14,9 @@ namespace AzSelfService.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class DeploymentsController(AzSelfServiceDbContext dbContext) : ControllerBase
+public sealed class DeploymentsController(
+    AzSelfServiceDbContext dbContext,
+    CustomerCredentialPreflightService preflightService) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType(typeof(DeploymentCreatedResponse), StatusCodes.Status201Created)]
@@ -25,6 +28,41 @@ public sealed class DeploymentsController(AzSelfServiceDbContext dbContext) : Co
     {
         var customerId = User.GetRequiredCustomerId();
         var userId = User.GetRequiredUserId();
+
+        var customer = await dbContext.Customers
+            .SingleOrDefaultAsync(x => x.Id == customerId && x.IsActive, cancellationToken);
+
+        if (customer is null)
+        {
+            return BadRequest(new { message = "Customer is not active or does not exist." });
+        }
+
+        if (string.IsNullOrWhiteSpace(customer.SpClientSecretSecretRef)
+            || string.IsNullOrWhiteSpace(customer.TenantId)
+            || string.IsNullOrWhiteSpace(customer.SubscriptionId))
+        {
+            return BadRequest(new
+            {
+                message = "Customer service principal Key Vault secret references are not configured.",
+                required = new[]
+                {
+                    "sp_client_secret_secret_ref",
+                    "tenant_id",
+                    "subscription_id"
+                }
+            });
+        }
+
+        var preflight = await preflightService.CheckAsync(customer, cancellationToken);
+        if (!preflight.CanProceed)
+        {
+            return BadRequest(new
+            {
+                message = "Deployment blocked by credential preflight checks.",
+                issues = preflight.Issues,
+                warnings = preflight.Warnings
+            });
+        }
 
         var module = await dbContext.Modules
             .SingleOrDefaultAsync(x => x.Id == request.ModuleId && x.IsPublished && !x.IsDeprecated, cancellationToken);

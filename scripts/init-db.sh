@@ -30,6 +30,10 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
         name VARCHAR(255) NOT NULL,
         subscription_id VARCHAR(255) NOT NULL UNIQUE,
         tenant_id VARCHAR(255) NOT NULL,
+        sp_client_id_secret_ref VARCHAR(1024),
+        sp_client_secret_secret_ref VARCHAR(1024),
+        sp_tenant_id_secret_ref VARCHAR(1024),
+        sp_subscription_id_secret_ref VARCHAR(1024),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT TRUE
@@ -37,6 +41,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE INDEX IF NOT EXISTS idx_customers_subscription_id ON customers(subscription_id);
     CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON customers(tenant_id);
     COMMENT ON TABLE customers IS 'Customer organizations - root of multi-tenant hierarchy';
+
+    -- Backward-compatible upgrades for existing dev databases
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS sp_client_id_secret_ref VARCHAR(1024);
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS sp_client_secret_secret_ref VARCHAR(1024);
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS sp_tenant_id_secret_ref VARCHAR(1024);
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS sp_subscription_id_secret_ref VARCHAR(1024);
 
     -- Users table
     CREATE TABLE IF NOT EXISTS users (
@@ -148,6 +158,15 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     INSERT INTO customers (name, subscription_id, tenant_id, is_active) 
     VALUES ('Development Tenant', 'dev-subscription-123', 'dev-tenant-id', TRUE)
     ON CONFLICT (subscription_id) DO NOTHING;
+
+    -- Store only Key Vault secret references (never secret values) for default tenant
+    UPDATE customers
+    SET
+        sp_client_id_secret_ref = COALESCE(sp_client_id_secret_ref, 'customers/' || id || '/sp-client-id'),
+        sp_client_secret_secret_ref = COALESCE(sp_client_secret_secret_ref, 'customers/' || id || '/sp-client-secret'),
+        sp_tenant_id_secret_ref = COALESCE(sp_tenant_id_secret_ref, 'customers/' || id || '/sp-tenant-id'),
+        sp_subscription_id_secret_ref = COALESCE(sp_subscription_id_secret_ref, 'customers/' || id || '/sp-subscription-id')
+    WHERE subscription_id = 'dev-subscription-123';
 
     -- Seed admin user (password: Test@1234, bcrypt hash with cost 10)
     INSERT INTO users (customer_id, username, password_hash, email, is_active)

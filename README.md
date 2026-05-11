@@ -214,6 +214,40 @@ azd up
 
 See [deployment guide](infrastructure/README.md) for full instructions.
 
+## Azure Bootstrap
+
+Use the bootstrap script to create a starting resource group and an RBAC-enabled Key Vault, then write the Key Vault secret references back into the platform database.
+
+```powershell
+# 1. Create the bootstrap resource group and Key Vault
+.\scripts\bootstrap-keyvault.ps1 `
+  -CredentialClixmlPath 'C:\Users\malcolm.COTTAGES\CredentialStore\PROD-Automation.clixml' `
+  -TenantId 'bf0465f4-f8c0-4ff4-978d-af5315afa795' `
+  -SubscriptionId '5b337264-50ba-4056-bc9f-1a926a433c18' `
+  -ResourceGroupName 'rg-azselfservice-bootstrap' `
+  -KeyVaultName 'azselfservicebootstrapkv' `
+  -SecretName 'starting-secret'
+
+# 2. Store the Key Vault client-secret reference on the customer record
+.\scripts\set-customer-keyvault-refs.ps1 `
+  -SubscriptionId '5b337264-50ba-4056-bc9f-1a926a433c18' `
+  -KeyVaultName 'azselfservicebootstrapkv'
+```
+
+Expected secret name for a customer is:
+
+```text
+customers/{customer_id}/sp-client-secret
+```
+
+Set this secret's content type to include appid metadata:
+
+```text
+appid={service-principal-app-id}
+```
+
+The platform reads tenant and subscription from customer metadata (`tenant_id`, `subscription_id`), and reads only the client secret from Key Vault.
+
 ---
 
 ## 📖 Usage Example
