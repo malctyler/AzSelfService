@@ -1,0 +1,76 @@
+# Multi-stage Dockerfile for AzSelfService Development & Backend
+# Stage 1: Builder
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS builder
+
+WORKDIR /src
+
+# Install basic build tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy solution files
+COPY backend/AzSelfService.sln ./
+COPY backend/AzSelfService.API/ ./AzSelfService.API/
+COPY backend/AzSelfService.Core/ ./AzSelfService.Core/
+COPY backend/AzSelfService.Infrastructure/ ./AzSelfService.Infrastructure/
+COPY backend/AzSelfService.Worker/ ./AzSelfService.Worker/
+
+# Restore and build
+RUN dotnet restore
+RUN dotnet build -c Release --no-restore
+
+# Publish
+RUN dotnet publish AzSelfService.API/AzSelfService.API.csproj -c Release -o /app/api
+RUN dotnet publish AzSelfService.Worker/AzSelfService.Worker.csproj -c Release -o /app/worker
+
+# Stage 2: Runtime for API
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime-api
+
+WORKDIR /app
+
+# Install required runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# NOTE: Terraform will be installed in devcontainer via features
+# For production, consider installing via terraform package source
+
+COPY --from=builder /app/api .
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+EXPOSE 5000
+ENTRYPOINT ["dotnet", "AzSelfService.API.dll"]
+
+# Stage 3: Runtime for Worker
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime-worker
+
+WORKDIR /app
+
+# Install required runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    bash \
+    jq \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# NOTE: Terraform will be installed in devcontainer via features
+# For production, consider installing via terraform package source
+
+COPY --from=builder /app/worker .
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD pgrep -f "AzSelfService.Worker.dll" > /dev/null || exit 1
+
+EXPOSE 5001
+ENTRYPOINT ["dotnet", "AzSelfService.Worker.dll"]

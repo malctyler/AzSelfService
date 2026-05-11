@@ -1,0 +1,81 @@
+name: "resource-group"
+version: "1.0.0"
+description: "Azure Resource Group - foundation for all resources"
+terraform_path: "terraform-modules/resource-group"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Name of the resource group"
+    validation:
+      pattern: "^[a-zA-Z0-9-_]*$"
+      message: "Must contain only alphanumeric characters, hyphens, and underscores"
+  
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region for the resource group"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+  
+  - name: "environment"
+    type: "string"
+    required: false
+    default: "dev"
+    description: "Environment (dev, staging, prod)"
+  
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags to apply to the resource group"
+
+outputs:
+  - name: "id"
+    description: "The ID of the created resource group"
+  
+  - name: "name"
+    description: "The name of the created resource group"
+  
+  - name: "location"
+    description: "The location of the created resource group"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Resource Group Configuration"
+      fields:
+        - name: "name"
+          label: "Resource Group Name"
+          component: "text-input"
+          placeholder: "my-resource-group"
+          help: "Alphanumeric, hyphens, underscores only"
+        
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+        
+        - name: "environment"
+          label: "Environment"
+          component: "select"
+          options:
+            - label: "Development"
+              value: "dev"
+            - label: "Staging"
+              value: "staging"
+            - label: "Production"
+              value: "prod"
+          help: "Controls lifecycle and retention policies"

@@ -1,0 +1,129 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: azselfservice-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_dev_password_123!}
+      POSTGRES_DB: ${DB_NAME:-azselfservice}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-azselfservice}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - azselfservice
+    profiles:
+      - dev
+
+  # ASP.NET Core Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: runtime-api
+    container_name: azselfservice-backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - DOTNET_RUNNING_IN_CONTAINER=true
+      - ConnectionStrings__DefaultConnection=Server=postgres;Port=5432;Database=${DB_NAME:-azselfservice};User Id=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres_dev_password_123!};
+      - JWT__Secret=${JWT_SECRET:-your-super-secret-jwt-key-min-32-characters-long-for-prod}
+      - JWT__Issuer=${JWT_ISSUER:-https://azselfservice.example.com}
+      - JWT__Audience=${JWT_AUDIENCE:-azselfservice-api}
+      - JWT__ExpirationHours=${JWT_EXPIRATION_HOURS:-24}
+      - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-az-selfservice-kv}
+      - Azure__KeyVault__Url=${AZURE_KEYVAULT_URL:-https://az-selfservice-kv.vault.azure.net/}
+      - Azure__Storage__AccountName=${AZURE_STORAGE_ACCOUNT_NAME:-tfstate12345}
+      - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-tfstate}
+      - TerraformConfig__ModulesPath=${TERRAFORM_MODULES_PATH:-./terraform-modules}
+      - TerraformConfig__WorkingDirectory=${TERRAFORM_WORKING_DIR:-/tmp/terraform}
+      - Logging__LogLevel__Default=Debug
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/src
+      - ./terraform-modules:/app/terraform-modules:ro
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - azselfservice
+    profiles:
+      - dev
+    command: dotnet AzSelfService.API.dll
+
+  # Next.js Frontend
+  frontend:
+    image: node:20-alpine
+    container_name: azselfservice-frontend
+    working_dir: /app
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - azselfservice
+    profiles:
+      - dev
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --hostname 0.0.0.0 --port 3000"
+
+  # Terraform Execution Worker (Placeholder for MVP)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: runtime-worker
+    container_name: azselfservice-worker
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5001
+      - DOTNET_RUNNING_IN_CONTAINER=true
+      - ConnectionStrings__DefaultConnection=Server=postgres;Port=5432;Database=${DB_NAME:-azselfservice};User Id=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres_dev_password_123!};
+      - JWT__Secret=${JWT_SECRET:-your-super-secret-jwt-key-min-32-characters-long-for-prod}
+      - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-az-selfservice-kv}
+      - Azure__Storage__AccountName=${AZURE_STORAGE_ACCOUNT_NAME:-tfstate12345}
+      - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-tfstate}
+      - TerraformConfig__ModulesPath=${TERRAFORM_MODULES_PATH:-./terraform-modules}
+      - TerraformConfig__WorkingDirectory=${TERRAFORM_WORKING_DIR:-/tmp/terraform}
+      - Logging__LogLevel__Default=Debug
+      - WORKER_POLL_INTERVAL_MS=5000
+      - WORKER_MAX_RETRIES=3
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./backend:/src
+      - ./terraform-modules:/app/terraform-modules:ro
+      - ./logs:/app/logs
+      - terraform_tmp:/tmp/terraform
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - azselfservice
+    profiles:
+      - dev
+    command: dotnet AzSelfService.Worker.dll
+
+networks:
+  azselfservice:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  terraform_tmp:
+    driver: local
