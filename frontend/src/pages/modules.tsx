@@ -1,7 +1,14 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
-import { createDeployment, getModules, type ModuleSummary } from '../lib/api'
+import {
+  createDeployment,
+  deprecateModule,
+  getModules,
+  publishModule,
+  registerModule,
+  type ModuleSummary
+} from '../lib/api'
 import { useAuthStore } from '../store/auth'
 
 type FormValues = Record<string, string>
@@ -10,12 +17,16 @@ export default function ModulesPage() {
   const router = useRouter()
   const hydrate = useAuthStore((state) => state.hydrate)
   const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
 
   const [modules, setModules] = useState<ModuleSummary[]>([])
   const [selectedModuleId, setSelectedModuleId] = useState<string>('')
   const [formValues, setFormValues] = useState<FormValues>({})
+  const [modulePath, setModulePath] = useState<string>('terraform-modules/resource-group')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAdminSubmitting, setIsAdminSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [adminMessage, setAdminMessage] = useState<string | null>(null)
 
   useEffect(() => {
     hydrate()
@@ -41,6 +52,7 @@ export default function ModulesPage() {
     () => modules.find((module) => module.id === selectedModuleId),
     [modules, selectedModuleId]
   )
+  const isAdminUser = user?.username?.toLowerCase() === 'admin'
 
   const properties = selectedModule?.schema?.properties || {}
   const requiredFields = new Set(selectedModule?.schema?.required || [])
@@ -60,6 +72,74 @@ export default function ModulesPage() {
       setError(err?.response?.data?.message || 'Failed to create deployment.')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const refreshModules = async () => {
+    const data = await getModules()
+    setModules(data)
+
+    if (data.length === 0) {
+      setSelectedModuleId('')
+      return
+    }
+
+    if (!data.some((module) => module.id === selectedModuleId)) {
+      setSelectedModuleId(data[0].id)
+    }
+  }
+
+  const submitRegisterModule = async () => {
+    setIsAdminSubmitting(true)
+    setAdminMessage(null)
+
+    try {
+      const module = await registerModule(modulePath)
+      await refreshModules()
+      setSelectedModuleId(module.id)
+      setAdminMessage(`Registered ${module.name} v${module.version}.`)
+    } catch (err: any) {
+      setAdminMessage(err?.response?.data?.message || 'Failed to register module.')
+    } finally {
+      setIsAdminSubmitting(false)
+    }
+  }
+
+  const submitDeprecateModule = async () => {
+    if (!selectedModule) {
+      return
+    }
+
+    setIsAdminSubmitting(true)
+    setAdminMessage(null)
+
+    try {
+      await deprecateModule(selectedModule.id)
+      await refreshModules()
+      setAdminMessage(`Deprecated ${selectedModule.name} v${selectedModule.version}.`)
+    } catch (err: any) {
+      setAdminMessage(err?.response?.data?.message || 'Failed to deprecate module.')
+    } finally {
+      setIsAdminSubmitting(false)
+    }
+  }
+
+  const submitPublishModule = async () => {
+    if (!selectedModule) {
+      return
+    }
+
+    setIsAdminSubmitting(true)
+    setAdminMessage(null)
+
+    try {
+      await publishModule(selectedModule.id)
+      await refreshModules()
+      setAdminMessage(`Published ${selectedModule.name} v${selectedModule.version}.`)
+    } catch (err: any) {
+      setAdminMessage(err?.response?.data?.message || 'Failed to publish module.')
+    } finally {
+      setIsAdminSubmitting(false)
     }
   }
 
@@ -137,6 +217,34 @@ export default function ModulesPage() {
           </button>
         </div>
       </section>
+
+      {isAdminUser && (
+        <section style={{ marginTop: 16, border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
+          <h2 style={{ marginTop: 0 }}>Admin Module Controls</h2>
+
+          <label style={{ display: 'block', marginBottom: 4 }}>Module Path</label>
+          <input
+            value={modulePath}
+            onChange={(e) => setModulePath(e.target.value)}
+            style={{ width: '100%', padding: 8, marginBottom: 10 }}
+            placeholder="terraform-modules/resource-group"
+          />
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={submitRegisterModule} disabled={isAdminSubmitting || modulePath.trim().length === 0}>
+              Register or Update Module
+            </button>
+            <button onClick={submitDeprecateModule} disabled={isAdminSubmitting || !selectedModule}>
+              Deprecate Selected Module
+            </button>
+            <button onClick={submitPublishModule} disabled={isAdminSubmitting || !selectedModule}>
+              Publish Selected Module
+            </button>
+          </div>
+
+          {adminMessage && <p style={{ marginBottom: 0 }}>{adminMessage}</p>}
+        </section>
+      )}
     </main>
   )
 }

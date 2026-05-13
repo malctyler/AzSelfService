@@ -75,6 +75,28 @@ export async function getModules(): Promise<ModuleSummary[]> {
   return response.data
 }
 
+export async function getModuleById(id: string): Promise<ModuleSummary> {
+  const response = await apiClient.get<ModuleSummary>(`/api/modules/${id}`)
+  return response.data
+}
+
+export async function registerModule(modulePath: string): Promise<ModuleSummary> {
+  const response = await apiClient.post<ModuleSummary>('/api/admin/modules/register', {
+    modulePath
+  })
+  return response.data
+}
+
+export async function publishModule(id: string): Promise<ModuleSummary> {
+  const response = await apiClient.post<ModuleSummary>(`/api/admin/modules/${id}/publish`)
+  return response.data
+}
+
+export async function deprecateModule(id: string): Promise<ModuleSummary> {
+  const response = await apiClient.post<ModuleSummary>(`/api/admin/modules/${id}/deprecate`)
+  return response.data
+}
+
 export async function createDeployment(moduleId: string, inputs: Record<string, unknown>) {
   const response = await apiClient.post<{ id: string; status: string; createdAtUtc: string }>('/api/deployments', {
     moduleId,
