@@ -68,6 +68,28 @@ export type DeploymentLog = {
   context?: unknown
 }
 
+export type OnboardCustomerRequest = {
+  customerName: string
+  subscriptionId: string
+  tenantId: string
+  username: string
+  password: string
+  email?: string
+  spClientIdSecretRef?: string
+  spClientSecretSecretRef?: string
+  spTenantIdSecretRef?: string
+  spSubscriptionIdSecretRef?: string
+}
+
+export type OnboardCustomerResponse = {
+  customerId: string
+  userId: string
+  username: string
+  role: string
+  createdAtUtc: string
+  spClientSecretSecretRefMasked: string
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const response = await apiClient.post<LoginResponse>('/api/auth/login', { username, password })
   return response.data
@@ -102,6 +124,11 @@ export async function publishModule(id: string): Promise<ModuleSummary> {
 
 export async function deprecateModule(id: string): Promise<ModuleSummary> {
   const response = await apiClient.post<ModuleSummary>(`/api/admin/modules/${id}/deprecate`)
+  return response.data
+}
+
+export async function onboardCustomer(request: OnboardCustomerRequest): Promise<OnboardCustomerResponse> {
+  const response = await apiClient.post<OnboardCustomerResponse>('/api/admin/customers/onboard', request)
   return response.data
 }
 

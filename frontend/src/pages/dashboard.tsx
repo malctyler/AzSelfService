@@ -52,6 +52,8 @@ export default function DashboardPage() {
         {user?.role?.toLowerCase() === 'admin' && (
           <div style={{ marginTop: 8 }}>
             <Link href="/admin/modules">Go to Admin Modules</Link>
+            <span> | </span>
+            <Link href="/admin/customers">Onboard Customer</Link>
           </div>
         )}
       </section>
