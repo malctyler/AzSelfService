@@ -18,6 +18,7 @@ builder.Services.AddDbContext<AzSelfServiceDbContext>(options =>
 
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<CustomerCredentialPreflightService>();
+builder.Services.AddScoped<KeyVaultReadinessService>();
 
 var keyVaultUrl = builder.Configuration["Azure:KeyVault:Url"];
 if (!string.IsNullOrWhiteSpace(keyVaultUrl))
@@ -109,6 +110,18 @@ app.MapControllers();
 
 app.MapGet("/health", () => Results.Ok(new { status = "OK", utc = DateTime.UtcNow }))
     .WithName("Health")
+    .WithOpenApi();
+
+app.MapGet("/health/ready", async (KeyVaultReadinessService readinessService, CancellationToken cancellationToken) =>
+    {
+        var result = await readinessService.CheckAsync(cancellationToken);
+        return result.IsReady
+            ? Results.Ok(new { status = "READY", checks = result.Checks, utc = DateTime.UtcNow })
+            : Results.Json(
+                new { status = "NOT_READY", checks = result.Checks, utc = DateTime.UtcNow },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+    })
+    .WithName("Readiness")
     .WithOpenApi();
 
 app.Run();

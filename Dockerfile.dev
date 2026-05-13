@@ -17,6 +17,8 @@ COPY backend/AzSelfService.API/ ./AzSelfService.API/
 COPY backend/AzSelfService.Core/ ./AzSelfService.Core/
 COPY backend/AzSelfService.Infrastructure/ ./AzSelfService.Infrastructure/
 COPY backend/AzSelfService.Worker/ ./AzSelfService.Worker/
+COPY backend/AzSelfService.API.Tests/ ./AzSelfService.API.Tests/
+COPY backend/AzSelfService.Worker.Tests/ ./AzSelfService.Worker.Tests/
 
 # Restore and build
 RUN dotnet restore
