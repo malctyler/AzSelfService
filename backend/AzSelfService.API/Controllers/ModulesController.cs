@@ -34,4 +34,31 @@ public sealed class ModulesController(AzSelfServiceDbContext dbContext) : Contro
 
         return Ok(modules);
     }
+
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ModuleSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ModuleSummaryResponse>> GetModuleById(Guid id, CancellationToken cancellationToken)
+    {
+        var module = await dbContext.Modules
+            .Where(x => x.Id == id && x.IsPublished && !x.IsDeprecated)
+            .Select(x => new ModuleSummaryResponse
+            {
+                Id = x.Id,
+                Name = x.Name,
+                Version = x.Version,
+                TerraformPath = x.TerraformPath,
+                Description = x.Description,
+                Schema = JsonHelpers.ParseJsonOrEmpty(x.Schema),
+                UiSchema = JsonHelpers.ParseNullableJson(x.UiSchema)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (module is null)
+        {
+            return NotFound(new { message = "Module not found." });
+        }
+
+        return Ok(module);
+    }
 }
