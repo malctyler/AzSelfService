@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzSelfService.Worker", "AzS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzSelfService.API.Tests", "AzSelfService.API.Tests\AzSelfService.API.Tests.csproj", "{D443F69F-9739-4C37-A3A1-4C62950FFBBD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzSelfService.Worker.Tests", "AzSelfService.Worker.Tests\AzSelfService.Worker.Tests.csproj", "{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{D443F69F-9739-4C37-A3A1-4C62950FFBBD}.Release|x64.Build.0 = Release|Any CPU
 		{D443F69F-9739-4C37-A3A1-4C62950FFBBD}.Release|x86.ActiveCfg = Release|Any CPU
 		{D443F69F-9739-4C37-A3A1-4C62950FFBBD}.Release|x86.Build.0 = Release|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Debug|x64.Build.0 = Debug|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Debug|x86.Build.0 = Debug|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Release|x64.ActiveCfg = Release|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Release|x64.Build.0 = Release|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Release|x86.ActiveCfg = Release|Any CPU
+		{9BD0CC6E-D294-4AEC-A10F-92C2E0D7D19C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
