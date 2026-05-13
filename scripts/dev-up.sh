@@ -23,9 +23,14 @@ set +a
 
 echo "✓ Loaded environment from $ENV_FILE"
 
+HAS_REAL_AZURE_CREDS=true
 if [ -z "${AZURE_CLIENT_ID:-}" ] || [ -z "${AZURE_TENANT_ID:-}" ] || [ -z "${AZURE_CLIENT_SECRET:-}" ] || \
-   [ "${AZURE_CLIENT_ID}" = "00000000-0000-0000-0000-000000000000" ] || \
-   [ "${AZURE_TENANT_ID}" = "00000000-0000-0000-0000-000000000000" ]; then
+    [ "${AZURE_CLIENT_ID}" = "00000000-0000-0000-0000-000000000000" ] || \
+    [ "${AZURE_TENANT_ID}" = "00000000-0000-0000-0000-000000000000" ]; then
+     HAS_REAL_AZURE_CREDS=false
+fi
+
+if [ "$HAS_REAL_AZURE_CREDS" = false ]; then
     echo "⚠ Azure Key Vault credentials look unset or placeholder."
     echo "  Preflight and deployment checks may fail until .env contains real values:"
     echo "  - AZURE_CLIENT_ID"
@@ -89,6 +94,30 @@ for i in {1..60}; do
     sleep 1
 done
 
+# Optional readiness check for Key Vault access when Azure credentials are configured
+if [ "$HAS_REAL_AZURE_CREDS" = true ]; then
+    echo -n "   Backend Readiness (/health/ready): "
+    ready_ok=false
+    for i in {1..30}; do
+        ready_code=$(curl -s -o /tmp/azselfservice_ready.json -w "%{http_code}" http://localhost:5000/health/ready || true)
+        if [ "$ready_code" = "200" ]; then
+            echo "✓ Ready"
+            ready_ok=true
+            break
+        fi
+        sleep 1
+    done
+
+    if [ "$ready_ok" = false ]; then
+        echo "⚠ Not ready"
+        if [ -f /tmp/azselfservice_ready.json ]; then
+            echo "   /health/ready response:"
+            cat /tmp/azselfservice_ready.json
+        fi
+        echo "   Deployment preflight may fail until readiness is healthy."
+    fi
+fi
+
 echo ""
 echo "✅ Services Started Successfully!"
 echo ""
@@ -96,6 +125,7 @@ echo "🌐 Access Points:"
 echo "   Frontend:     http://localhost:3000"
 echo "   Backend API:  http://localhost:5000"
 echo "   API Docs:     http://localhost:5000/swagger"
+echo "   Readiness:    http://localhost:5000/health/ready"
 echo "   PostgreSQL:   localhost:5432"
 echo ""
 echo "🔐 Test Credentials:"
