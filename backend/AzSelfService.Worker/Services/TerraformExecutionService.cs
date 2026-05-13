@@ -40,7 +40,14 @@ public sealed class TerraformExecutionService(
         await File.WriteAllTextAsync(inputsPath, normalizedInputs, cancellationToken);
 
         var stateFilePath = ResolveStateFilePath(deployment);
-        Directory.CreateDirectory(Path.GetDirectoryName(stateFilePath)!);
+        if (string.Equals(operation, OperationDestroy, StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureDestroyStateExists(stateFilePath, deployment.TerraformStatePath);
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(stateFilePath)!);
+        }
 
         await writeLogAsync("INFO", "terraform init", new { modulePath = deployment.Module?.TerraformPath }, cancellationToken);
         await RunTerraformCommandAsync(
@@ -146,6 +153,22 @@ public sealed class TerraformExecutionService(
         }
 
         return JsonSerializer.Serialize(filtered);
+    }
+
+    private static void EnsureDestroyStateExists(string stateFilePath, string? logicalStatePath)
+    {
+        if (!File.Exists(stateFilePath))
+        {
+            throw new InvalidOperationException(
+                $"Terraform destroy aborted: state file was not found. logicalStatePath='{logicalStatePath}', resolvedPath='{stateFilePath}'.");
+        }
+
+        var stateFileInfo = new FileInfo(stateFilePath);
+        if (stateFileInfo.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Terraform destroy aborted: state file is empty. logicalStatePath='{logicalStatePath}', resolvedPath='{stateFilePath}'.");
+        }
     }
 
     private async Task<string> RunTerraformCommandAsync(
