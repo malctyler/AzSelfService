@@ -319,14 +319,16 @@ Frontend displays outputs to user
 
 ```csharp
 // Worker starts with Managed Identity
-var kvUri = "https://az-selfservice-kv.vault.azure.net/";
+var kvUri = "https://{vault-name}.vault.azure.net/";
 var client = new SecretClient(new Uri(kvUri), new DefaultAzureCredential());
 
-// Read customer's SP credentials
-var clientId = await client.GetSecretAsync($"customers/{customerId}/sp-client-id");
+// Read single secret and metadata from Key Vault
 var clientSecret = await client.GetSecretAsync($"customers/{customerId}/sp-client-secret");
-var tenantId = await client.GetSecretAsync($"customers/{customerId}/sp-tenant-id");
-var subscriptionId = await client.GetSecretAsync($"customers/{customerId}/sp-subscription-id");
+var clientId = ParseAppIdFromMetadata(clientSecret.Value.Properties.ContentType);
+
+// Read tenant/subscription from customer metadata
+var tenantId = customer.TenantId;
+var subscriptionId = customer.SubscriptionId;
 ```
 
 ### Worker Injects Into Terraform
@@ -335,10 +337,10 @@ var subscriptionId = await client.GetSecretAsync($"customers/{customerId}/sp-sub
 // Set environment variables before running terraform
 var env = new Dictionary<string, string>
 {
-    { "ARM_CLIENT_ID", clientId.Value.Value },
+  { "ARM_CLIENT_ID", clientId },
     { "ARM_CLIENT_SECRET", clientSecret.Value.Value },
-    { "ARM_TENANT_ID", tenantId.Value.Value },
-    { "ARM_SUBSCRIPTION_ID", subscriptionId.Value.Value }
+  { "ARM_TENANT_ID", tenantId },
+  { "ARM_SUBSCRIPTION_ID", subscriptionId }
 };
 
 var process = new Process {

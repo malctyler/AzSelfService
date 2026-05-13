@@ -199,22 +199,25 @@ Subscription ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 **Key Vault structure:**
 ```
-Key Vault: az-selfservice-kv
+Key Vault: <environment-specific-vault>
 
 Secrets:
-  customers/{customer_id}/sp-client-id
   customers/{customer_id}/sp-client-secret
-  customers/{customer_id}/sp-tenant-id
-  customers/{customer_id}/sp-subscription-id
 ```
 
-**Example:**
-```
-Key: customers/a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c/sp-client-id
-Value: 12345678-1234-1234-1234-123456789012
+The secret value stores the client secret only. The service principal app id is stored in secret metadata:
 
+```
 Key: customers/a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c/sp-client-secret
 Value: my-secret-value-abc123xyz
+Content-Type: appid=12345678-1234-1234-1234-123456789012
+```
+
+Tenant and subscription are stored in the customer row:
+
+```sql
+customers.tenant_id
+customers.subscription_id
 ```
 
 ### Credential Injection at Deployment Time
@@ -224,12 +227,13 @@ When the worker executes Terraform:
 1. **Worker starts** with Managed Identity (platform's identity)
 2. **Worker reads from Key Vault** using Managed Identity:
    ```csharp
-   var kvUri = "https://az-selfservice-kv.vault.azure.net/";
+   var kvUri = "https://{vault-name}.vault.azure.net/";
    var client = new SecretClient(new Uri(kvUri), new DefaultAzureCredential());
    
-   var clientId = await client.GetSecretAsync($"customers/{customerId}/sp-client-id");
    var clientSecret = await client.GetSecretAsync($"customers/{customerId}/sp-client-secret");
-   var tenantId = await client.GetSecretAsync($"customers/{customerId}/sp-tenant-id");
+   var clientId = ParseAppIdFromMetadata(clientSecret.Value.Properties.ContentType);
+   var tenantId = customer.TenantId;
+   var subscriptionId = customer.SubscriptionId;
    ```
 
 3. **Worker sets environment variables** for Terraform:
