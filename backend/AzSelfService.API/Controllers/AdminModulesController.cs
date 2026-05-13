@@ -61,20 +61,75 @@ public sealed class AdminModulesController(
 
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            return Ok(new ModuleSummaryResponse
-            {
-                Id = module.Id,
-                Name = module.Name,
-                Version = module.Version,
-                TerraformPath = module.TerraformPath,
-                Description = module.Description,
-                Schema = JsonHelpers.ParseJsonOrEmpty(module.Schema),
-                UiSchema = JsonHelpers.ParseNullableJson(module.UiSchema)
-            });
+            return Ok(ToResponse(module));
         }
         catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("{id:guid}/publish")]
+    [ProducesResponseType(typeof(ModuleSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ModuleSummaryResponse>> PublishModule(Guid id, CancellationToken cancellationToken)
+    {
+        if (!User.IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        var module = await dbContext.Modules.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (module is null)
+        {
+            return NotFound(new { message = "Module not found." });
+        }
+
+        module.IsPublished = true;
+        module.IsDeprecated = false;
+        module.UpdatedAt = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(module));
+    }
+
+    [HttpPost("{id:guid}/deprecate")]
+    [ProducesResponseType(typeof(ModuleSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ModuleSummaryResponse>> DeprecateModule(Guid id, CancellationToken cancellationToken)
+    {
+        if (!User.IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        var module = await dbContext.Modules.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (module is null)
+        {
+            return NotFound(new { message = "Module not found." });
+        }
+
+        module.IsPublished = false;
+        module.IsDeprecated = true;
+        module.UpdatedAt = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(module));
+    }
+
+    private static ModuleSummaryResponse ToResponse(ModuleEntity module)
+    {
+        return new ModuleSummaryResponse
+        {
+            Id = module.Id,
+            Name = module.Name,
+            Version = module.Version,
+            TerraformPath = module.TerraformPath,
+            Description = module.Description,
+            Schema = JsonHelpers.ParseJsonOrEmpty(module.Schema),
+            UiSchema = JsonHelpers.ParseNullableJson(module.UiSchema)
+        };
     }
 }

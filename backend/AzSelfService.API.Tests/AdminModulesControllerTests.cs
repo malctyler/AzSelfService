@@ -124,6 +124,97 @@ public sealed class AdminModulesControllerTests
         }
     }
 
+    [Fact]
+    public async Task PublishModule_ReturnsForbid_WhenCallerIsNotAdmin()
+    {
+        var rootPath = CreateTempRoot();
+
+        try
+        {
+            await using var db = CreateDbContext();
+            var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
+            var controller = CreateController(db, loader, username: "standard-user");
+
+            var result = await controller.PublishModule(Guid.NewGuid(), CancellationToken.None);
+
+            Assert.IsType<ForbidResult>(result.Result);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAndDeprecateModule_UpdateLifecycleFlags_WhenCallerIsAdmin()
+    {
+        var rootPath = CreateTempRoot();
+
+        try
+        {
+            var moduleId = Guid.NewGuid();
+
+            await using var db = CreateDbContext();
+            db.Modules.Add(new ModuleEntity
+            {
+                Id = moduleId,
+                Name = "resource-group",
+                Version = "1.0.0",
+                TerraformPath = "terraform-modules/resource-group",
+                Schema = "{}",
+                IsPublished = false,
+                IsDeprecated = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
+            var controller = CreateController(db, loader, username: "admin");
+
+            var publishResult = await controller.PublishModule(moduleId, CancellationToken.None);
+            var publishOk = Assert.IsType<OkObjectResult>(publishResult.Result);
+            Assert.IsType<ModuleSummaryResponse>(publishOk.Value);
+
+            var published = await db.Modules.SingleAsync(x => x.Id == moduleId);
+            Assert.True(published.IsPublished);
+            Assert.False(published.IsDeprecated);
+
+            var deprecateResult = await controller.DeprecateModule(moduleId, CancellationToken.None);
+            var deprecateOk = Assert.IsType<OkObjectResult>(deprecateResult.Result);
+            Assert.IsType<ModuleSummaryResponse>(deprecateOk.Value);
+
+            var deprecated = await db.Modules.SingleAsync(x => x.Id == moduleId);
+            Assert.False(deprecated.IsPublished);
+            Assert.True(deprecated.IsDeprecated);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DeprecateModule_ReturnsNotFound_WhenModuleMissing()
+    {
+        var rootPath = CreateTempRoot();
+
+        try
+        {
+            await using var db = CreateDbContext();
+            var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
+            var controller = CreateController(db, loader, username: "admin");
+
+            var result = await controller.DeprecateModule(Guid.NewGuid(), CancellationToken.None);
+
+            Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
     private static AdminModulesController CreateController(
         AzSelfServiceDbContext db,
         ModuleManifestLoader loader,
