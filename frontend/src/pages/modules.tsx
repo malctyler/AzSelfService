@@ -52,7 +52,7 @@ export default function ModulesPage() {
     () => modules.find((module) => module.id === selectedModuleId),
     [modules, selectedModuleId]
   )
-  const isAdminUser = user?.username?.toLowerCase() === 'admin'
+  const isAdminUser = user?.role?.toLowerCase() === 'admin'
 
   const properties = selectedModule?.schema?.properties || {}
   const requiredFields = new Set(selectedModule?.schema?.required || [])

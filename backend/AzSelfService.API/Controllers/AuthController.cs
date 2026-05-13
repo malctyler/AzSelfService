@@ -50,6 +50,7 @@ public sealed class AuthController(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        var role = JwtTokenService.GetRoleForUser(user);
         var (token, expiresAtUtc) = jwtTokenService.GenerateToken(user);
 
         return Ok(new LoginResponse
@@ -61,6 +62,7 @@ public sealed class AuthController(
                 UserId = user.Id,
                 CustomerId = user.CustomerId,
                 Username = user.Username,
+                Role = role,
                 Email = user.Email
             }
         });

@@ -12,7 +12,7 @@ namespace AzSelfService.API.Controllers;
 
 [ApiController]
 [Route("api/admin/modules")]
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 public sealed class AdminModulesController(
     AzSelfServiceDbContext dbContext,
     ModuleManifestLoader manifestLoader) : ControllerBase

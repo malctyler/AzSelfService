@@ -18,5 +18,6 @@ public sealed class AuthenticatedUser
     public required Guid UserId { get; init; }
     public required Guid CustomerId { get; init; }
     public required string Username { get; init; }
+    public required string Role { get; init; }
     public string? Email { get; init; }
 }

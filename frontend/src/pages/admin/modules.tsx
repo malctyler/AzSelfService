@@ -15,7 +15,7 @@ export default function AdminModulesPage() {
   const [isBusy, setIsBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
-  const isAdminUser = user?.username?.toLowerCase() === 'admin'
+  const isAdminUser = user?.role?.toLowerCase() === 'admin'
 
   useEffect(() => {
     hydrate()

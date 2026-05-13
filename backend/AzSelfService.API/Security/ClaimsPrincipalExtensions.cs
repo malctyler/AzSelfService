@@ -13,7 +13,11 @@ public static class ClaimsPrincipalExtensions
     }
 
     public static bool IsAdminUser(this ClaimsPrincipal principal)
-        => string.Equals(principal.GetRequiredUsername(), "admin", StringComparison.OrdinalIgnoreCase);
+    {
+        return principal.IsInRole(AppRoles.Admin)
+            || string.Equals(principal.FindFirstValue("role"), AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(principal.GetRequiredUsername(), AppRoles.Admin, StringComparison.OrdinalIgnoreCase);
+    }
 
     public static Guid GetRequiredUserId(this ClaimsPrincipal principal)
     {

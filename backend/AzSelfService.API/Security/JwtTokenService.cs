@@ -7,12 +7,19 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace AzSelfService.API.Security;
 
+public static class AppRoles
+{
+    public const string Admin = "admin";
+    public const string Customer = "customer";
+}
+
 public sealed class JwtTokenService(IOptions<JwtOptions> options)
 {
     private readonly JwtOptions _options = options.Value;
 
     public (string token, DateTime expiresAtUtc) GenerateToken(UserEntity user)
     {
+        var role = GetRoleForUser(user);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var expiresAtUtc = DateTime.UtcNow.AddHours(_options.ExpirationHours);
@@ -22,6 +29,8 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options)
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new("customer_id", user.CustomerId.ToString()),
             new("username", user.Username),
+            new(ClaimTypes.Role, role),
+            new("role", role),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -35,6 +44,11 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options)
 
         return (new JwtSecurityTokenHandler().WriteToken(tokenDescriptor), expiresAtUtc);
     }
+
+    public static string GetRoleForUser(UserEntity user)
+        => string.Equals(user.Username, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+            ? AppRoles.Admin
+            : AppRoles.Customer;
 }
 
 public sealed class JwtOptions

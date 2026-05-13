@@ -49,7 +49,7 @@ export default function DashboardPage() {
         <h2 style={{ marginTop: 0 }}>Available Modules</h2>
         <p>{modules.length} published modules are available for deployment.</p>
         <Link href="/modules">Go to Module Catalog</Link>
-        {user?.username?.toLowerCase() === 'admin' && (
+        {user?.role?.toLowerCase() === 'admin' && (
           <div style={{ marginTop: 8 }}>
             <Link href="/admin/modules">Go to Admin Modules</Link>
           </div>

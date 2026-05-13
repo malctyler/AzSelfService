@@ -16,6 +16,7 @@ public sealed class CustomerCredentialsController(
     CustomerCredentialPreflightService preflightService) : ControllerBase
 {
     [HttpPut("admin/customers/{customerId:guid}/credential-references")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(CustomerCredentialReferencesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

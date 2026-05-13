@@ -18,6 +18,7 @@ export type AuthUser = {
   userId: string
   customerId: string
   username: string
+  role: string
   email?: string
 }
 
