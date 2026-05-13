@@ -5,15 +5,33 @@ echo "🚀 Starting AzSelfService Development Environment"
 echo "=================================================="
 echo ""
 
-# Check if .env.docker exists
-if [ ! -f .env.docker ]; then
-    echo "❌ Error: .env.docker not found"
-    echo "   Run: ./scripts/dev-setup.sh"
-    exit 1
+# Load environment variables from the local file.
+ENV_FILE=".env"
+if [ ! -f "$ENV_FILE" ]; then
+    if [ -f .env.docker ]; then
+        ENV_FILE=".env.docker"
+    else
+        echo "❌ Error: neither .env nor .env.docker was found"
+        echo "   Run: ./scripts/dev-setup.sh"
+        exit 1
+    fi
 fi
 
-# Load environment variables
-export $(cat .env.docker | grep -v '^#' | xargs)
+set -a
+. "./$ENV_FILE"
+set +a
+
+echo "✓ Loaded environment from $ENV_FILE"
+
+if [ -z "${AZURE_CLIENT_ID:-}" ] || [ -z "${AZURE_TENANT_ID:-}" ] || [ -z "${AZURE_CLIENT_SECRET:-}" ] || \
+   [ "${AZURE_CLIENT_ID}" = "00000000-0000-0000-0000-000000000000" ] || \
+   [ "${AZURE_TENANT_ID}" = "00000000-0000-0000-0000-000000000000" ]; then
+    echo "⚠ Azure Key Vault credentials look unset or placeholder."
+    echo "  Preflight and deployment checks may fail until .env contains real values:"
+    echo "  - AZURE_CLIENT_ID"
+    echo "  - AZURE_TENANT_ID"
+    echo "  - AZURE_CLIENT_SECRET"
+fi
 
 echo "📦 Starting Docker Compose Services..."
 echo "   - PostgreSQL (port 5432)"

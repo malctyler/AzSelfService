@@ -181,7 +181,8 @@ AzSelfService/
 ├── logs/                   # Application logs (created by setup)
 ├── docker-compose.yml      # Service orchestration
 ├── Dockerfile.dev          # Multi-stage build
-├── .env.docker             # Local environment config
+├── .env                    # Local environment config (git-ignored)
+├── .env.docker             # Legacy local env fallback (git-ignored)
 ├── .env.example            # Config template
 ├── Makefile                # Convenient commands
 └── README.md               # Project overview
@@ -432,7 +433,7 @@ dotnet run
 
 ### Environment Variable Changes
 
-1. Edit `.env.docker`
+1. Edit `.env`
 2. Restart services: `make restart`
 3. Or edit individual service env in `docker-compose.yml`
 
@@ -454,7 +455,7 @@ make up
 ### "Backend cannot connect to database"
 
 ```bash
-# Verify connection string in .env.docker
+# Verify connection string in .env
 # Test from backend container
 make shell-api
 psql postgresql://postgres:password@postgres:5432/azselfservice

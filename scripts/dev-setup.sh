@@ -5,17 +5,22 @@ echo "🔧 AzSelfService Development Environment Setup"
 echo "=============================================="
 echo ""
 
-# Check if .env.docker exists, if not create it
-if [ ! -f .env.docker ]; then
-    echo "📝 Creating .env.docker from .env.example..."
-    cp .env.example .env.docker
-    echo "   ✓ .env.docker created"
+# Check if .env exists, otherwise create it from the template.
+if [ ! -f .env ]; then
+    if [ -f .env.docker ]; then
+        echo "📝 Creating .env from existing .env.docker..."
+        cp .env.docker .env
+    else
+        echo "📝 Creating .env from .env.example..."
+        cp .env.example .env
+    fi
+    echo "   ✓ .env created"
     echo ""
-    echo "⚠️  Important: Review .env.docker and update with your values"
-    echo "   (especially Azure credentials for production)"
+    echo "⚠️  Important: Review .env and update with your local Azure values"
+    echo "   (the file is ignored by git and stays machine-local)"
     echo ""
 else
-    echo "✓ .env.docker already exists"
+    echo "✓ .env already exists"
 fi
 
 # Create logs directory
@@ -34,7 +39,7 @@ fi
 
 echo ""
 echo "📋 Setup Checklist:"
-echo "   ✓ .env.docker configuration"
+echo "   ✓ .env configuration"
 echo "   ✓ logs directory"
 echo "   ✓ terraform working directory"
 echo ""
@@ -42,7 +47,7 @@ echo ""
 echo "✅ Setup Complete!"
 echo ""
 echo "🚀 Next Steps:"
-echo "   1. Review .env.docker for Azure settings"
+echo "   1. Review .env for Azure settings"
 echo "   2. Run: ./scripts/dev-up.sh"
 echo "   3. Wait for all services to start (PostgreSQL, Backend, Frontend)"
 echo "   4. Access frontend at: http://localhost:3000"

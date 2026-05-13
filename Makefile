@@ -5,7 +5,7 @@ help:
 	@echo "==================================="
 	@echo ""
 	@echo "Setup & Cleanup:"
-	@echo "  make setup          Setup development environment (.env.docker, directories)"
+	@echo "  make setup          Setup development environment (.env, directories)"
 	@echo "  make up             Start all development containers"
 	@echo "  make down           Stop all development containers"
 	@echo "  make restart        Restart all services"
