@@ -220,6 +220,10 @@ Set the secret content type to include the SP app id:
 
 Tenant and subscription are read from customer metadata (`tenant_id`, `subscription_id`).
 
+For repeatable local setup using CLIXML and `.env`, see:
+
+- [Local Key Vault Development Runbook](docs/architecture/local-keyvault-dev-runbook.md)
+
 ### Starting Development
 
 ```bash

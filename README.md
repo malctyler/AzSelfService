@@ -61,6 +61,7 @@ Start here to understand the platform:
 | [Solution Overview](docs/architecture/solution-overview.md) | Platform vision, customer flows, MVP scope |
 | [Authentication Model](docs/architecture/auth-model.md) | User auth, authorization, multi-tenancy |
 | [Terraform Execution](docs/architecture/terraform-execution.md) | Job queue, state management, log streaming |
+| [Local Key Vault Runbook](docs/architecture/local-keyvault-dev-runbook.md) | Local CLIXML to .env workflow and preflight validation |
 | [Database Design](docs/architecture/database-design.md) | Data model, schema, migrations |
 | [Module Framework](docs/architecture/module-framework.md) | How modules become products, versioning |
 
