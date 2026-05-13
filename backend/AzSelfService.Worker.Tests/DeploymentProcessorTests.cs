@@ -144,12 +144,25 @@ public sealed class DeploymentProcessorTests
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<DeploymentProcessor>.Instance,
             credentialProvider,
+            new TerraformExecutionService(
+                Options.Create(new WorkerOptions
+                {
+                    TerraformExecutionMode = "simulate",
+                    TerraformBinaryPath = "terraform",
+                    RepositoryRootPath = "/app",
+                    TerraformWorkingDirectory = "/tmp/terraform"
+                }),
+                NullLogger<TerraformExecutionService>.Instance),
             Options.Create(new WorkerOptions
             {
                 PollIntervalMs = 10,
                 MaxRetries = maxRetries,
                 BatchSize = 5,
-                SecretExpiryWarningDays = 30
+                SecretExpiryWarningDays = 30,
+                TerraformExecutionMode = "simulate",
+                TerraformBinaryPath = "terraform",
+                RepositoryRootPath = "/app",
+                TerraformWorkingDirectory = "/tmp/terraform"
             }));
 
         var db = provider.GetRequiredService<WorkerDbContext>();

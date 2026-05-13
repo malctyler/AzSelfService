@@ -63,6 +63,7 @@ public sealed class WorkerDbContext(DbContextOptions<WorkerDbContext> options) :
             entity.Property(x => x.Id).HasColumnName("id");
             entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(255);
             entity.Property(x => x.Version).HasColumnName("version").HasMaxLength(50);
+            entity.Property(x => x.TerraformPath).HasColumnName("terraform_path").HasMaxLength(512);
             entity.Property(x => x.IsPublished).HasColumnName("is_published");
             entity.Property(x => x.IsDeprecated).HasColumnName("is_deprecated");
         });

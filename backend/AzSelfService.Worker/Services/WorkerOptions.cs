@@ -6,4 +6,8 @@ public sealed class WorkerOptions
     public int MaxRetries { get; set; } = 3;
     public int BatchSize { get; set; } = 5;
     public int SecretExpiryWarningDays { get; set; } = 30;
+    public string TerraformExecutionMode { get; set; } = "simulate";
+    public string TerraformBinaryPath { get; set; } = "terraform";
+    public string RepositoryRootPath { get; set; } = "/app";
+    public string TerraformWorkingDirectory { get; set; } = "/tmp/terraform";
 }

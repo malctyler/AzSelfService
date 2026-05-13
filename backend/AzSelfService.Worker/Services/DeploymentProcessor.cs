@@ -13,6 +13,7 @@ public sealed class DeploymentProcessor(
     IServiceScopeFactory scopeFactory,
     ILogger<DeploymentProcessor> logger,
     ServicePrincipalCredentialProvider credentialProvider,
+    TerraformExecutionService terraformExecutionService,
     IOptions<WorkerOptions> options) : BackgroundService
 {
     private readonly WorkerOptions _options = options.Value;
@@ -121,7 +122,20 @@ public sealed class DeploymentProcessor(
                 clientSecretExpiresOn = credentialResolution.SecretMetadata.ClientSecretExpiresOn
             }, cancellationToken);
 
-            await SimulateTerraformRunAsync(db, deployment, credentialResolution.Credentials, cancellationToken);
+            await WriteLogAsync(db, deployment.Id, "INFO", "Terraform execution mode selected.", new
+            {
+                mode = _options.TerraformExecutionMode
+            }, cancellationToken);
+
+            var outputPayload = IsRealExecutionMode(_options.TerraformExecutionMode)
+                ? await terraformExecutionService.ExecuteAsync(
+                    deployment,
+                    credentialResolution.Credentials,
+                    (level, message, context, ct) => WriteLogAsync(db, deployment.Id, level, message, context, ct),
+                    cancellationToken)
+                : await SimulateTerraformRunAsync(db, deployment, credentialResolution.Credentials, cancellationToken);
+
+            await UpsertDeploymentOutputAsync(db, deployment.Id, outputPayload, cancellationToken);
 
             deployment.Status = "SUCCEEDED";
             deployment.ErrorMessage = null;
@@ -164,7 +178,7 @@ public sealed class DeploymentProcessor(
         }
     }
 
-    private static async Task SimulateTerraformRunAsync(
+    private static async Task<string> SimulateTerraformRunAsync(
         WorkerDbContext db,
         DeploymentEntity deployment,
         ServicePrincipalCredentials credentials,
@@ -179,7 +193,7 @@ public sealed class DeploymentProcessor(
         await WriteLogAsync(db, deployment.Id, "INFO", "terraform apply -auto-approve", null, cancellationToken);
         await Task.Delay(1200, cancellationToken);
 
-        var outputPayload = JsonSerializer.Serialize(new
+        return JsonSerializer.Serialize(new
         {
             deploymentId = deployment.Id,
             moduleId = deployment.ModuleId,
@@ -187,16 +201,23 @@ public sealed class DeploymentProcessor(
             resourceId = $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{deployment.Id:N}",
             statePath = deployment.TerraformStatePath
         });
+    }
 
+    private static async Task UpsertDeploymentOutputAsync(
+        WorkerDbContext db,
+        Guid deploymentId,
+        string outputPayload,
+        CancellationToken cancellationToken)
+    {
         var existingOutput = await db.DeploymentOutputs
-            .SingleOrDefaultAsync(x => x.DeploymentId == deployment.Id, cancellationToken);
+            .SingleOrDefaultAsync(x => x.DeploymentId == deploymentId, cancellationToken);
 
         if (existingOutput is null)
         {
             db.DeploymentOutputs.Add(new DeploymentOutputEntity
             {
                 Id = Guid.NewGuid(),
-                DeploymentId = deployment.Id,
+                DeploymentId = deploymentId,
                 Outputs = outputPayload,
                 CreatedAt = DateTime.UtcNow
             });
@@ -208,6 +229,9 @@ public sealed class DeploymentProcessor(
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    private static bool IsRealExecutionMode(string? mode)
+        => string.Equals(mode, "real", StringComparison.OrdinalIgnoreCase);
 
     private static async Task WriteLogAsync(
         WorkerDbContext db,

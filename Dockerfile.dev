@@ -53,6 +53,7 @@ ENTRYPOINT ["dotnet", "AzSelfService.API.dll"]
 
 # Stage 3: Runtime for Worker
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime-worker
+ARG TERRAFORM_VERSION=1.9.8
 
 WORKDIR /app
 
@@ -62,11 +63,15 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     bash \
     jq \
+    unzip \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-# NOTE: Terraform will be installed in devcontainer via features
-# For production, consider installing via terraform package source
+RUN curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip \
+    && unzip /tmp/terraform.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/terraform \
+    && rm /tmp/terraform.zip \
+    && terraform -version
 
 COPY --from=builder /app/worker .
 
