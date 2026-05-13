@@ -33,6 +33,8 @@ export type ModuleSummary = {
   version: string
   terraformPath: string
   description?: string
+  isPublished: boolean
+  isDeprecated: boolean
   schema: {
     type?: string
     properties?: Record<string, { type?: string; enum?: string[]; minLength?: number; pattern?: string }>
@@ -84,6 +86,11 @@ export async function registerModule(modulePath: string): Promise<ModuleSummary>
   const response = await apiClient.post<ModuleSummary>('/api/admin/modules/register', {
     modulePath
   })
+  return response.data
+}
+
+export async function getAdminModules(): Promise<ModuleSummary[]> {
+  const response = await apiClient.get<ModuleSummary[]>('/api/admin/modules')
   return response.data
 }
 

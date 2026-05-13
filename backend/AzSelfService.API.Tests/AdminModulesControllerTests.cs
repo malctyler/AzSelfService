@@ -15,6 +15,79 @@ namespace AzSelfService.API.Tests;
 public sealed class AdminModulesControllerTests
 {
     [Fact]
+    public async Task GetAllModules_ReturnsForbid_WhenCallerIsNotAdmin()
+    {
+        var rootPath = CreateTempRoot();
+
+        try
+        {
+            await using var db = CreateDbContext();
+            var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
+            var controller = CreateController(db, loader, username: "standard-user");
+
+            var result = await controller.GetAllModules(CancellationToken.None);
+
+            Assert.IsType<ForbidResult>(result.Result);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetAllModules_ReturnsPublishedAndDeprecated_WhenCallerIsAdmin()
+    {
+        var rootPath = CreateTempRoot();
+
+        try
+        {
+            await using var db = CreateDbContext();
+            db.Modules.AddRange(
+                new ModuleEntity
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "resource-group",
+                    Version = "1.0.0",
+                    TerraformPath = "terraform-modules/resource-group",
+                    Schema = "{}",
+                    IsPublished = true,
+                    IsDeprecated = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new ModuleEntity
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "storage-account",
+                    Version = "1.0.0",
+                    TerraformPath = "terraform-modules/storage-account",
+                    Schema = "{}",
+                    IsPublished = false,
+                    IsDeprecated = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+
+            var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
+            var controller = CreateController(db, loader, username: "admin");
+
+            var result = await controller.GetAllModules(CancellationToken.None);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var payload = Assert.IsAssignableFrom<IReadOnlyList<ModuleSummaryResponse>>(ok.Value);
+            Assert.Equal(2, payload.Count);
+            Assert.Contains(payload, x => x.Name == "resource-group");
+            Assert.Contains(payload, x => x.Name == "storage-account");
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RegisterModule_ReturnsForbid_WhenCallerIsNotAdmin()
     {
         var rootPath = CreateTempRoot();

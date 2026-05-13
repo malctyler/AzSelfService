@@ -27,6 +27,8 @@ public sealed class ModulesController(AzSelfServiceDbContext dbContext) : Contro
                 Version = x.Version,
                 TerraformPath = x.TerraformPath,
                 Description = x.Description,
+                IsPublished = x.IsPublished,
+                IsDeprecated = x.IsDeprecated,
                 Schema = JsonHelpers.ParseJsonOrEmpty(x.Schema),
                 UiSchema = JsonHelpers.ParseNullableJson(x.UiSchema)
             })
@@ -49,6 +51,8 @@ public sealed class ModulesController(AzSelfServiceDbContext dbContext) : Contro
                 Version = x.Version,
                 TerraformPath = x.TerraformPath,
                 Description = x.Description,
+                IsPublished = x.IsPublished,
+                IsDeprecated = x.IsDeprecated,
                 Schema = JsonHelpers.ParseJsonOrEmpty(x.Schema),
                 UiSchema = JsonHelpers.ParseNullableJson(x.UiSchema)
             })

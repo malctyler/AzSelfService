@@ -9,6 +9,8 @@ public sealed class ModuleSummaryResponse
     public string Version { get; init; } = string.Empty;
     public string TerraformPath { get; init; } = string.Empty;
     public string? Description { get; init; }
+    public bool IsPublished { get; init; }
+    public bool IsDeprecated { get; init; }
     public JsonElement Schema { get; init; }
     public JsonElement? UiSchema { get; init; }
 }

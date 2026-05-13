@@ -17,6 +17,25 @@ public sealed class AdminModulesController(
     AzSelfServiceDbContext dbContext,
     ModuleManifestLoader manifestLoader) : ControllerBase
 {
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ModuleSummaryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<ModuleSummaryResponse>>> GetAllModules(CancellationToken cancellationToken)
+    {
+        if (!User.IsAdminUser())
+        {
+            return Forbid();
+        }
+
+        var modules = await dbContext.Modules
+            .OrderBy(x => x.Name)
+            .ThenByDescending(x => x.Version)
+            .Select(x => ToResponse(x))
+            .ToListAsync(cancellationToken);
+
+        return Ok(modules);
+    }
+
     [HttpPost("register")]
     [ProducesResponseType(typeof(ModuleSummaryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -128,6 +147,8 @@ public sealed class AdminModulesController(
             Version = module.Version,
             TerraformPath = module.TerraformPath,
             Description = module.Description,
+            IsPublished = module.IsPublished,
+            IsDeprecated = module.IsDeprecated,
             Schema = JsonHelpers.ParseJsonOrEmpty(module.Schema),
             UiSchema = JsonHelpers.ParseNullableJson(module.UiSchema)
         };
