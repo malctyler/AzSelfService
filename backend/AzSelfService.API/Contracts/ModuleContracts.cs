@@ -12,3 +12,8 @@ public sealed class ModuleSummaryResponse
     public JsonElement Schema { get; init; }
     public JsonElement? UiSchema { get; init; }
 }
+
+public sealed class RegisterModuleRequest
+{
+    public string ModulePath { get; init; } = string.Empty;
+}
