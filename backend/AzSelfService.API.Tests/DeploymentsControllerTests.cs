@@ -76,6 +76,173 @@ public sealed class DeploymentsControllerTests
         Assert.Equal(0, await db.Deployments.CountAsync());
     }
 
+    [Fact]
+    public async Task GetDeploymentById_ReturnsNotFound_WhenDeploymentBelongsToAnotherCustomer()
+    {
+        var ownerCustomerId = Guid.NewGuid();
+        var callerCustomerId = Guid.NewGuid();
+        var ownerUserId = Guid.NewGuid();
+        var callerUserId = Guid.NewGuid();
+        var deploymentId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        await using var db = CreateDbContext();
+        SeedCustomersUsersAndModule(db, ownerCustomerId, callerCustomerId, ownerUserId, callerUserId, moduleId, deploymentId, now);
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, callerCustomerId, callerUserId);
+
+        var result = await controller.GetDeploymentById(deploymentId, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetDeploymentLogs_ReturnsNotFound_WhenDeploymentBelongsToAnotherCustomer()
+    {
+        var ownerCustomerId = Guid.NewGuid();
+        var callerCustomerId = Guid.NewGuid();
+        var ownerUserId = Guid.NewGuid();
+        var callerUserId = Guid.NewGuid();
+        var deploymentId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        await using var db = CreateDbContext();
+        SeedCustomersUsersAndModule(db, ownerCustomerId, callerCustomerId, ownerUserId, callerUserId, moduleId, deploymentId, now);
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, callerCustomerId, callerUserId);
+
+        var result = await controller.GetDeploymentLogs(deploymentId, sinceId: null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    private static DeploymentsController CreateController(AzSelfServiceDbContext db, Guid customerId, Guid userId)
+    {
+        var preflightService = new CustomerCredentialPreflightService(
+            new ConfigurationBuilder().Build(),
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<CustomerCredentialPreflightService>.Instance);
+
+        return new DeploymentsController(db, preflightService)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(
+                        new ClaimsIdentity(
+                            new[]
+                            {
+                                new Claim("customer_id", customerId.ToString()),
+                                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                                new Claim("sub", userId.ToString()),
+                                new Claim("username", "standard-user")
+                            },
+                            authenticationType: "Test"))
+                }
+            }
+        };
+    }
+
+    private static void SeedCustomersUsersAndModule(
+        AzSelfServiceDbContext db,
+        Guid ownerCustomerId,
+        Guid callerCustomerId,
+        Guid ownerUserId,
+        Guid callerUserId,
+        Guid moduleId,
+        Guid deploymentId,
+        DateTime now)
+    {
+        db.Customers.AddRange(
+            new CustomerEntity
+            {
+                Id = ownerCustomerId,
+                Name = "Owner Customer",
+                IsActive = true,
+                TenantId = "tenant-owner",
+                SubscriptionId = "sub-owner",
+                SpClientSecretSecretRef = "customers/owner/sp-client-secret"
+            },
+            new CustomerEntity
+            {
+                Id = callerCustomerId,
+                Name = "Caller Customer",
+                IsActive = true,
+                TenantId = "tenant-caller",
+                SubscriptionId = "sub-caller",
+                SpClientSecretSecretRef = "customers/caller/sp-client-secret"
+            });
+
+        db.Users.AddRange(
+            new UserEntity
+            {
+                Id = ownerUserId,
+                CustomerId = ownerCustomerId,
+                Username = "owner-user",
+                PasswordHash = "hash",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new UserEntity
+            {
+                Id = callerUserId,
+                CustomerId = callerCustomerId,
+                Username = "caller-user",
+                PasswordHash = "hash",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+        db.Modules.Add(new ModuleEntity
+        {
+            Id = moduleId,
+            Name = "resource-group",
+            Version = "1.0.0",
+            TerraformPath = "terraform-modules/resource-group",
+            Schema = "{}",
+            IsPublished = true,
+            IsDeprecated = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        db.Deployments.Add(new DeploymentEntity
+        {
+            Id = deploymentId,
+            CustomerId = ownerCustomerId,
+            ModuleId = moduleId,
+            RequestedBy = ownerUserId,
+            Status = "QUEUED",
+            CreatedAt = now,
+            UpdatedAt = now,
+            TerraformStatePath = "tfstate/test.tfstate"
+        });
+
+        db.DeploymentInputs.Add(new DeploymentInputEntity
+        {
+            Id = Guid.NewGuid(),
+            DeploymentId = deploymentId,
+            Inputs = "{}",
+            CreatedAt = now
+        });
+
+        db.DeploymentLogs.Add(new DeploymentLogEntity
+        {
+            DeploymentId = deploymentId,
+            Timestamp = now,
+            Level = "INFO",
+            Message = "seeded",
+            Context = null
+        });
+    }
+
     private static AzSelfServiceDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AzSelfServiceDbContext>()
