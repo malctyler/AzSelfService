@@ -120,6 +120,72 @@ public sealed class DeploymentsControllerTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task DestroyDeployment_QueuesDestroyJob_WhenDeploymentSucceeded()
+    {
+        var customerId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var deploymentId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        await using var db = CreateDbContext();
+        SeedCustomersUsersAndModule(db, customerId, Guid.NewGuid(), userId, Guid.NewGuid(), moduleId, deploymentId, now);
+        await db.SaveChangesAsync();
+
+        var deployment = await db.Deployments.SingleAsync(x => x.Id == deploymentId);
+        deployment.Status = "SUCCEEDED";
+        deployment.TerraformStatePath = "tfstate/customers/customer/module/state.tfstate";
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, customerId, userId);
+
+        var result = await controller.DestroyDeployment(deploymentId, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var payload = Assert.IsType<DeploymentCreatedResponse>(created.Value);
+
+        Assert.NotEqual(deploymentId, payload.Id);
+        Assert.Equal("QUEUED", payload.Status);
+
+        var destroyDeployment = await db.Deployments.Include(x => x.Input)
+            .SingleAsync(x => x.Id == payload.Id);
+
+        Assert.Equal(customerId, destroyDeployment.CustomerId);
+        Assert.Equal(moduleId, destroyDeployment.ModuleId);
+        Assert.Equal("tfstate/customers/customer/module/state.tfstate", destroyDeployment.TerraformStatePath);
+
+        using var inputDoc = JsonDocument.Parse(destroyDeployment.Input!.Inputs);
+        Assert.True(inputDoc.RootElement.TryGetProperty("__operation", out var operation));
+        Assert.Equal("destroy", operation.GetString());
+    }
+
+    [Fact]
+    public async Task DestroyDeployment_ReturnsNotFound_WhenDeploymentBelongsToAnotherCustomer()
+    {
+        var ownerCustomerId = Guid.NewGuid();
+        var callerCustomerId = Guid.NewGuid();
+        var ownerUserId = Guid.NewGuid();
+        var callerUserId = Guid.NewGuid();
+        var deploymentId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        await using var db = CreateDbContext();
+        SeedCustomersUsersAndModule(db, ownerCustomerId, callerCustomerId, ownerUserId, callerUserId, moduleId, deploymentId, now);
+        await db.SaveChangesAsync();
+
+        var deployment = await db.Deployments.SingleAsync(x => x.Id == deploymentId);
+        deployment.Status = "SUCCEEDED";
+        deployment.TerraformStatePath = "tfstate/customers/owner/module/state.tfstate";
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, callerCustomerId, callerUserId);
+        var result = await controller.DestroyDeployment(deploymentId, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
     private static DeploymentsController CreateController(AzSelfServiceDbContext db, Guid customerId, Guid userId)
     {
         var preflightService = new CustomerCredentialPreflightService(

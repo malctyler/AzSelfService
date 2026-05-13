@@ -13,8 +13,12 @@ public sealed class TerraformExecutionService(
 {
     private readonly WorkerOptions _options = options.Value;
 
+    public const string OperationCreate = "create";
+    public const string OperationDestroy = "destroy";
+
     public async Task<string> ExecuteAsync(
         DeploymentEntity deployment,
+        string operation,
         ServicePrincipalCredentials credentials,
         Func<string, string, object?, CancellationToken, Task> writeLogAsync,
         CancellationToken cancellationToken)
@@ -32,8 +36,11 @@ public sealed class TerraformExecutionService(
         CopyDirectory(modulePath, executionModulePath);
 
         var inputsPath = Path.Combine(executionModulePath, "inputs.auto.tfvars.json");
-        var normalizedInputs = NormalizeInputsJson(deployment.Input?.Inputs);
+        var normalizedInputs = NormalizeInputsJson(deployment.Input?.Inputs, operation);
         await File.WriteAllTextAsync(inputsPath, normalizedInputs, cancellationToken);
+
+        var stateFilePath = ResolveStateFilePath(deployment);
+        Directory.CreateDirectory(Path.GetDirectoryName(stateFilePath)!);
 
         await writeLogAsync("INFO", "terraform init", new { modulePath = deployment.Module?.TerraformPath }, cancellationToken);
         await RunTerraformCommandAsync(
@@ -43,16 +50,35 @@ public sealed class TerraformExecutionService(
             writeLogAsync,
             cancellationToken);
 
+        if (string.Equals(operation, OperationDestroy, StringComparison.OrdinalIgnoreCase))
+        {
+            await writeLogAsync("INFO", "terraform destroy -auto-approve", null, cancellationToken);
+            await RunTerraformCommandAsync(
+                $"destroy -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json -state=\"{stateFilePath}\"",
+                executionModulePath,
+                credentials,
+                writeLogAsync,
+                cancellationToken);
+
+            logger.LogInformation("Terraform destroy completed for deployment {DeploymentId}.", deployment.Id);
+            return JsonSerializer.Serialize(new
+            {
+                operation = OperationDestroy,
+                statePath = deployment.TerraformStatePath,
+                destroyed = true
+            });
+        }
+
         await writeLogAsync("INFO", "terraform apply -auto-approve", null, cancellationToken);
         await RunTerraformCommandAsync(
-            "apply -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json",
+            $"apply -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json -state=\"{stateFilePath}\"",
             executionModulePath,
             credentials,
             writeLogAsync,
             cancellationToken);
 
         var output = await RunTerraformCommandAsync(
-            "output -json",
+            $"output -json -state=\"{stateFilePath}\"",
             executionModulePath,
             credentials,
             writeLogAsync,
@@ -84,7 +110,18 @@ public sealed class TerraformExecutionService(
         return modulePath;
     }
 
-    private static string NormalizeInputsJson(string? inputJson)
+    private string ResolveStateFilePath(DeploymentEntity deployment)
+    {
+        if (string.IsNullOrWhiteSpace(deployment.TerraformStatePath))
+        {
+            throw new InvalidOperationException("Deployment terraform state path is not configured.");
+        }
+
+        var relative = deployment.TerraformStatePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        return Path.Combine(_options.TerraformWorkingDirectory, "state", relative);
+    }
+
+    private static string NormalizeInputsJson(string? inputJson, string operation)
     {
         if (string.IsNullOrWhiteSpace(inputJson))
         {
@@ -92,7 +129,23 @@ public sealed class TerraformExecutionService(
         }
 
         using var document = JsonDocument.Parse(inputJson);
-        return JsonSerializer.Serialize(document.RootElement);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return "{}";
+        }
+
+        var filtered = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            if (property.Name.StartsWith("__", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            filtered[property.Name] = property.Value.Clone();
+        }
+
+        return JsonSerializer.Serialize(filtered);
     }
 
     private async Task<string> RunTerraformCommandAsync(

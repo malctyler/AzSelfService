@@ -196,4 +196,92 @@ public sealed class DeploymentsController(
 
         return Ok(logs);
     }
+
+    [HttpPost("{id:guid}/destroy")]
+    [ProducesResponseType(typeof(DeploymentCreatedResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeploymentCreatedResponse>> DestroyDeployment(Guid id, CancellationToken cancellationToken)
+    {
+        var customerId = User.GetRequiredCustomerId();
+        var userId = User.GetRequiredUserId();
+
+        var target = await dbContext.Deployments
+            .Include(x => x.Input)
+            .Include(x => x.Module)
+            .SingleOrDefaultAsync(x => x.Id == id && x.CustomerId == customerId, cancellationToken);
+
+        if (target is null || target.Input is null || target.Module is null)
+        {
+            return NotFound(new { message = "Deployment not found." });
+        }
+
+        if (!string.Equals(target.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Only succeeded deployments can be destroyed." });
+        }
+
+        if (string.IsNullOrWhiteSpace(target.TerraformStatePath))
+        {
+            return BadRequest(new { message = "Deployment has no terraform state path for destroy operation." });
+        }
+
+        using var sourceInput = JsonDocument.Parse(target.Input.Inputs);
+        var sourceJson = sourceInput.RootElement;
+        var payload = sourceJson.ValueKind == JsonValueKind.Object
+            ? sourceJson.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.Clone())
+            : new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+
+        payload["__operation"] = JsonSerializer.SerializeToElement("destroy");
+        payload["__targetDeploymentId"] = JsonSerializer.SerializeToElement(target.Id);
+
+        var now = DateTime.UtcNow;
+        var destroyDeployment = new DeploymentEntity
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customerId,
+            ModuleId = target.ModuleId,
+            RequestedBy = userId,
+            Status = "QUEUED",
+            RetryCount = 0,
+            CreatedAt = now,
+            UpdatedAt = now,
+            TerraformStatePath = target.TerraformStatePath
+        };
+
+        dbContext.Deployments.Add(destroyDeployment);
+        dbContext.DeploymentInputs.Add(new DeploymentInputEntity
+        {
+            Id = Guid.NewGuid(),
+            DeploymentId = destroyDeployment.Id,
+            Inputs = JsonSerializer.Serialize(payload),
+            CreatedAt = now
+        });
+        dbContext.DeploymentLogs.Add(new DeploymentLogEntity
+        {
+            DeploymentId = destroyDeployment.Id,
+            Timestamp = now,
+            Level = "INFO",
+            Message = "Destroy deployment queued.",
+            Context = JsonSerializer.Serialize(new
+            {
+                targetDeploymentId = target.Id,
+                module = target.Module.Name,
+                moduleVersion = target.Module.Version,
+                operation = "destroy"
+            })
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return CreatedAtAction(
+            nameof(GetDeploymentById),
+            new { id = destroyDeployment.Id },
+            new DeploymentCreatedResponse
+            {
+                Id = destroyDeployment.Id,
+                Status = destroyDeployment.Status,
+                CreatedAtUtc = destroyDeployment.CreatedAt
+            });
+    }
 }

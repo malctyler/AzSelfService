@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useRef, useState } from 'react'
-import { getDeployment, getDeploymentLogs, type DeploymentDetails, type DeploymentLog } from '../../lib/api'
+import { destroyDeployment, getDeployment, getDeploymentLogs, type DeploymentDetails, type DeploymentLog } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 
 export default function DeploymentPage() {
@@ -14,6 +14,8 @@ export default function DeploymentPage() {
   const [deployment, setDeployment] = useState<DeploymentDetails | null>(null)
   const [logs, setLogs] = useState<DeploymentLog[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [isDestroying, setIsDestroying] = useState(false)
 
   const latestLogIdRef = useRef<number | undefined>(undefined)
 
@@ -73,6 +75,31 @@ export default function DeploymentPage() {
     }
   }, [token, deploymentId, router])
 
+  const triggerDestroy = async () => {
+    if (!deploymentId || !deployment || deployment.status !== 'SUCCEEDED' || isDestroying) {
+      return
+    }
+
+    const confirmed = window.confirm('Queue destroy for this deployment? This will remove created resources.')
+    if (!confirmed) {
+      return
+    }
+
+    setIsDestroying(true)
+    setActionMessage(null)
+    setError(null)
+
+    try {
+      const response = await destroyDeployment(deploymentId)
+      setActionMessage(`Destroy queued as deployment ${response.id}. Redirecting...`)
+      router.push(`/deployment/${response.id}`)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to queue destroy deployment.')
+    } finally {
+      setIsDestroying(false)
+    }
+  }
+
   return (
     <main style={{ maxWidth: 1100, margin: '2rem auto', padding: '0 1rem' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -101,6 +128,14 @@ export default function DeploymentPage() {
             <strong>Error:</strong> {deployment.errorMessage}
           </p>
         )}
+
+        {deployment?.status === 'SUCCEEDED' && (
+          <button onClick={triggerDestroy} disabled={isDestroying}>
+            {isDestroying ? 'Queueing Destroy...' : 'Destroy Resources'}
+          </button>
+        )}
+
+        {actionMessage && <p>{actionMessage}</p>}
       </section>
 
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>

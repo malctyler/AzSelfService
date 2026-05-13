@@ -127,17 +127,27 @@ public sealed class DeploymentProcessor(
                 mode = _options.TerraformExecutionMode
             }, cancellationToken);
 
+            var operation = ResolveOperation(deployment.Input?.Inputs);
+
+            await WriteLogAsync(db, deployment.Id, "INFO", "Terraform operation selected.", new
+            {
+                operation
+            }, cancellationToken);
+
             var outputPayload = IsRealExecutionMode(_options.TerraformExecutionMode)
                 ? await terraformExecutionService.ExecuteAsync(
                     deployment,
+                    operation,
                     credentialResolution.Credentials,
                     (level, message, context, ct) => WriteLogAsync(db, deployment.Id, level, message, context, ct),
                     cancellationToken)
-                : await SimulateTerraformRunAsync(db, deployment, credentialResolution.Credentials, cancellationToken);
+                : await SimulateTerraformRunAsync(db, deployment, credentialResolution.Credentials, operation, cancellationToken);
 
             await UpsertDeploymentOutputAsync(db, deployment.Id, outputPayload, cancellationToken);
 
-            deployment.Status = "SUCCEEDED";
+            deployment.Status = string.Equals(operation, TerraformExecutionService.OperationDestroy, StringComparison.OrdinalIgnoreCase)
+                ? "ROLLED_BACK"
+                : "SUCCEEDED";
             deployment.ErrorMessage = null;
             deployment.CompletedAt = DateTime.UtcNow;
             deployment.UpdatedAt = DateTime.UtcNow;
@@ -182,10 +192,27 @@ public sealed class DeploymentProcessor(
         WorkerDbContext db,
         DeploymentEntity deployment,
         ServicePrincipalCredentials credentials,
+        string operation,
         CancellationToken cancellationToken)
     {
         await WriteLogAsync(db, deployment.Id, "INFO", "terraform init", null, cancellationToken);
         await Task.Delay(700, cancellationToken);
+
+        if (string.Equals(operation, TerraformExecutionService.OperationDestroy, StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteLogAsync(db, deployment.Id, "INFO", "terraform destroy -auto-approve", null, cancellationToken);
+            await Task.Delay(1200, cancellationToken);
+
+            return JsonSerializer.Serialize(new
+            {
+                deploymentId = deployment.Id,
+                moduleId = deployment.ModuleId,
+                simulated = true,
+                operation,
+                statePath = deployment.TerraformStatePath,
+                destroyed = true
+            });
+        }
 
         await WriteLogAsync(db, deployment.Id, "INFO", "terraform plan", null, cancellationToken);
         await Task.Delay(700, cancellationToken);
@@ -198,6 +225,7 @@ public sealed class DeploymentProcessor(
             deploymentId = deployment.Id,
             moduleId = deployment.ModuleId,
             simulated = true,
+            operation,
             resourceId = $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{deployment.Id:N}",
             statePath = deployment.TerraformStatePath
         });
@@ -232,6 +260,35 @@ public sealed class DeploymentProcessor(
 
     private static bool IsRealExecutionMode(string? mode)
         => string.Equals(mode, "real", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveOperation(string? inputsJson)
+    {
+        if (string.IsNullOrWhiteSpace(inputsJson))
+        {
+            return TerraformExecutionService.OperationCreate;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(inputsJson);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("__operation", out var operationElement)
+                && operationElement.ValueKind == JsonValueKind.String)
+            {
+                var operation = operationElement.GetString();
+                if (string.Equals(operation, TerraformExecutionService.OperationDestroy, StringComparison.OrdinalIgnoreCase))
+                {
+                    return TerraformExecutionService.OperationDestroy;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Keep default create operation if input is malformed.
+        }
+
+        return TerraformExecutionService.OperationCreate;
+    }
 
     private static async Task WriteLogAsync(
         WorkerDbContext db,

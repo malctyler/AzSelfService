@@ -151,3 +151,8 @@ export async function getDeploymentLogs(id: string, sinceId?: number): Promise<D
   })
   return response.data
 }
+
+export async function destroyDeployment(id: string): Promise<{ id: string; status: string; createdAtUtc: string }> {
+  const response = await apiClient.post<{ id: string; status: string; createdAtUtc: string }>(`/api/deployments/${id}/destroy`)
+  return response.data
+}
