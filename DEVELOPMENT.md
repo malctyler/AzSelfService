@@ -182,7 +182,6 @@ AzSelfService/
 ├── docker-compose.yml      # Service orchestration
 ├── Dockerfile.dev          # Multi-stage build
 ├── .env                    # Local environment config (git-ignored)
-├── .env.docker             # Legacy local env fallback (git-ignored)
 ├── .env.example            # Config template
 ├── Makefile                # Convenient commands
 └── README.md               # Project overview

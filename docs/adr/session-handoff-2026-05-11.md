@@ -44,7 +44,7 @@ Implemented and validated the Phase 2b security flow for single-secret service p
   - `AZURE_CLIENT_ID`
   - `AZURE_TENANT_ID`
   - `AZURE_CLIENT_SECRET`
-- Updated `.env.example` and `.env.docker` for current Key Vault defaults and local auth guidance.
+- Updated `.env.example` and local `.env` workflow for current Key Vault defaults and auth guidance.
 - Updated DB init script to include secret-reference columns and backward-compatible ALTERs.
 
 ## Azure Validation State (Live)
