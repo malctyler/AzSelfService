@@ -10,4 +10,6 @@ public sealed class WorkerOptions
     public string TerraformBinaryPath { get; set; } = "terraform";
     public string RepositoryRootPath { get; set; } = "/app";
     public string TerraformWorkingDirectory { get; set; } = "/tmp/terraform";
+    public string AzureStorageAccountName { get; set; } = "";
+    public string AzureStorageContainerName { get; set; } = "customer-tfstate";
 }

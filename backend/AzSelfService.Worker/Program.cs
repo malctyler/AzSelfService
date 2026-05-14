@@ -19,6 +19,8 @@ builder.Services.Configure<WorkerOptions>(options =>
     options.TerraformBinaryPath = builder.Configuration["WORKER_TERRAFORM_BINARY_PATH"] ?? "terraform";
     options.RepositoryRootPath = builder.Configuration["WORKER_REPOSITORY_ROOT_PATH"] ?? "/app";
     options.TerraformWorkingDirectory = builder.Configuration["WORKER_TERRAFORM_WORKING_DIR"] ?? "/tmp/terraform";
+    options.AzureStorageAccountName = builder.Configuration["Azure:Storage:AccountName"] ?? "";
+    options.AzureStorageContainerName = builder.Configuration["Azure:Storage:ContainerName"] ?? "customer-tfstate";
 });
 
 builder.Services.AddSingleton(_ =>

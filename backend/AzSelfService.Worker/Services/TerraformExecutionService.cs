@@ -39,19 +39,12 @@ public sealed class TerraformExecutionService(
         var normalizedInputs = NormalizeInputsJson(deployment.Input?.Inputs, operation);
         await File.WriteAllTextAsync(inputsPath, normalizedInputs, cancellationToken);
 
-        var stateFilePath = ResolveStateFilePath(deployment);
-        if (string.Equals(operation, OperationDestroy, StringComparison.OrdinalIgnoreCase))
-        {
-            EnsureDestroyStateExists(stateFilePath, deployment.TerraformStatePath);
-        }
-        else
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(stateFilePath)!);
-        }
+        var stateKey = ResolveStateKey(deployment);
+        var initArgs = BuildInitArgs(stateKey);
 
-        await writeLogAsync("INFO", "terraform init", new { modulePath = deployment.Module?.TerraformPath }, cancellationToken);
+        await writeLogAsync("INFO", "terraform init", new { modulePath = deployment.Module?.TerraformPath, stateKey }, cancellationToken);
         await RunTerraformCommandAsync(
-            "init -input=false -no-color",
+            initArgs,
             executionModulePath,
             credentials,
             writeLogAsync,
@@ -59,9 +52,11 @@ public sealed class TerraformExecutionService(
 
         if (string.Equals(operation, OperationDestroy, StringComparison.OrdinalIgnoreCase))
         {
+            await EnsureRemoteStateHasResourcesAsync(executionModulePath, credentials, writeLogAsync, cancellationToken);
+
             await writeLogAsync("INFO", "terraform destroy -auto-approve", null, cancellationToken);
             await RunTerraformCommandAsync(
-                $"destroy -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json -state=\"{stateFilePath}\"",
+                "destroy -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json",
                 executionModulePath,
                 credentials,
                 writeLogAsync,
@@ -71,21 +66,21 @@ public sealed class TerraformExecutionService(
             return JsonSerializer.Serialize(new
             {
                 operation = OperationDestroy,
-                statePath = deployment.TerraformStatePath,
+                stateKey,
                 destroyed = true
             });
         }
 
         await writeLogAsync("INFO", "terraform apply -auto-approve", null, cancellationToken);
         await RunTerraformCommandAsync(
-            $"apply -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json -state=\"{stateFilePath}\"",
+            "apply -auto-approve -input=false -no-color -var-file=inputs.auto.tfvars.json",
             executionModulePath,
             credentials,
             writeLogAsync,
             cancellationToken);
 
         var output = await RunTerraformCommandAsync(
-            $"output -json -state=\"{stateFilePath}\"",
+            "output -json",
             executionModulePath,
             credentials,
             writeLogAsync,
@@ -117,15 +112,51 @@ public sealed class TerraformExecutionService(
         return modulePath;
     }
 
-    private string ResolveStateFilePath(DeploymentEntity deployment)
+    private static string ResolveStateKey(DeploymentEntity deployment)
     {
         if (string.IsNullOrWhiteSpace(deployment.TerraformStatePath))
         {
             throw new InvalidOperationException("Deployment terraform state path is not configured.");
         }
 
-        var relative = deployment.TerraformStatePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
-        return Path.Combine(_options.TerraformWorkingDirectory, "state", relative);
+        return deployment.TerraformStatePath.Replace('\\', '/');
+    }
+
+    private string BuildInitArgs(string stateKey)
+    {
+        var accountName = _options.AzureStorageAccountName;
+        var containerName = _options.AzureStorageContainerName;
+
+        if (string.IsNullOrWhiteSpace(accountName))
+        {
+            throw new InvalidOperationException("AzureStorageAccountName must be configured for remote Terraform state.");
+        }
+
+        return $"init -input=false -no-color -reconfigure" +
+               $" -backend-config=\"storage_account_name={accountName}\"" +
+               $" -backend-config=\"container_name={containerName}\"" +
+               $" -backend-config=\"key={stateKey}\"";
+    }
+
+    private async Task EnsureRemoteStateHasResourcesAsync(
+        string executionModulePath,
+        ServicePrincipalCredentials credentials,
+        Func<string, string, object?, CancellationToken, Task> writeLogAsync,
+        CancellationToken cancellationToken)
+    {
+        var stateList = await RunTerraformCommandAsync(
+            "state list -no-color",
+            executionModulePath,
+            credentials,
+            writeLogAsync,
+            cancellationToken,
+            logOutput: false);
+
+        if (string.IsNullOrWhiteSpace(stateList))
+        {
+            throw new InvalidOperationException(
+                "Terraform destroy aborted: no resources found in remote state. The infrastructure may already have been destroyed.");
+        }
     }
 
     private static string NormalizeInputsJson(string? inputJson, string operation)
@@ -153,22 +184,6 @@ public sealed class TerraformExecutionService(
         }
 
         return JsonSerializer.Serialize(filtered);
-    }
-
-    private static void EnsureDestroyStateExists(string stateFilePath, string? logicalStatePath)
-    {
-        if (!File.Exists(stateFilePath))
-        {
-            throw new InvalidOperationException(
-                $"Terraform destroy aborted: state file was not found. logicalStatePath='{logicalStatePath}', resolvedPath='{stateFilePath}'.");
-        }
-
-        var stateFileInfo = new FileInfo(stateFilePath);
-        if (stateFileInfo.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"Terraform destroy aborted: state file is empty. logicalStatePath='{logicalStatePath}', resolvedPath='{stateFilePath}'.");
-        }
     }
 
     private async Task<string> RunTerraformCommandAsync(
