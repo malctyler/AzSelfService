@@ -44,7 +44,7 @@ services:
       - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-azselfservice-1338-kv}
       - Azure__KeyVault__Url=${AZURE_KEYVAULT_URL:-https://azselfservice-1338-kv.vault.azure.net/}
       - Azure__Storage__AccountName=${AZURE_STORAGE_ACCOUNT_NAME:-tfstate12345}
-      - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-tfstate}
+      - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-customer-tfstate}
       - TerraformConfig__ModulesPath=${TERRAFORM_MODULES_PATH:-./terraform-modules}
       - TerraformConfig__WorkingDirectory=${TERRAFORM_WORKING_DIR:-/tmp/terraform}
       - Logging__LogLevel__Default=Debug
@@ -103,7 +103,7 @@ services:
       - Azure__KeyVault__Name=${AZURE_KEYVAULT_NAME:-azselfservice-1338-kv}
       - Azure__KeyVault__Url=${AZURE_KEYVAULT_URL:-https://azselfservice-1338-kv.vault.azure.net/}
       - Azure__Storage__AccountName=${AZURE_STORAGE_ACCOUNT_NAME:-tfstate12345}
-      - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-tfstate}
+      - Azure__Storage__ContainerName=${AZURE_STORAGE_CONTAINER_NAME:-customer-tfstate}
       - TerraformConfig__ModulesPath=${TERRAFORM_MODULES_PATH:-./terraform-modules}
       - TerraformConfig__WorkingDirectory=${TERRAFORM_WORKING_DIR:-/tmp/terraform}
       - Logging__LogLevel__Default=Debug
