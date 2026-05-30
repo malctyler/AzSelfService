@@ -189,11 +189,26 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     )
     ON CONFLICT (name, version) DO NOTHING;
 
+    -- Seed Storage Account module
+    INSERT INTO modules (name, version, terraform_path, schema, ui_schema, description, is_published, is_deprecated)
+    VALUES (
+        'storage-account',
+        '1.0.0',
+        'terraform-modules/storage-account',
+        '{"type": "object", "properties": {"name": {"type": "string", "minLength": 3, "maxLength": 24, "pattern": "^[a-z0-9]{3,24}$"}, "resource_group_name": {"type": "string", "minLength": 1}, "location": {"type": "string", "enum": ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]}, "account_tier": {"type": "string", "enum": ["Standard", "Premium"]}, "account_replication_type": {"type": "string", "enum": ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"]}}, "required": ["name", "resource_group_name", "location"]}',
+        '{"fields": [{"name": "name", "label": "Storage Account Name", "placeholder": "stazselfservicedev01", "help": "3-24 lowercase letters and numbers only"}, {"name": "resource_group_name", "label": "Resource Group Name", "placeholder": "rg-azselfservice-dev"}, {"name": "location", "label": "Azure Region", "type": "select"}, {"name": "account_tier", "label": "Performance Tier", "type": "select"}, {"name": "account_replication_type", "label": "Replication", "type": "select"}]}',
+        'Azure Storage Account - general purpose v2 storage',
+        TRUE,
+        FALSE
+    )
+    ON CONFLICT (name, version) DO NOTHING;
+
 EOSQL
 
 echo "✓ Database schema created"
 echo "✓ Default customer and admin user seeded"
 echo "✓ Resource Group module registered"
+echo "✓ Storage Account module registered"
 echo ""
 echo "🔐 Test Login:"
 echo "   Username: admin"

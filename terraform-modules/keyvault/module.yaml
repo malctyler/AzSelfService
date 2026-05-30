@@ -1,0 +1,89 @@
+name: "keyvault"
+version: "1.0.0"
+description: "Azure Key Vault - secure secrets management"
+terraform_path: "terraform-modules/keyvault"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Globally unique Key Vault name (3-24 alphanumeric or hyphens)"
+    validation:
+      pattern: "^[a-zA-Z0-9-]{3,24}$"
+      message: "Name must be 3-24 characters, alphanumeric or hyphens."
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group to deploy the Key Vault."
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region for the Key Vault."
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "tenant_id"
+    type: "string"
+    required: true
+    description: "Azure AD tenant ID."
+
+  - name: "sku_name"
+    type: "string"
+    required: false
+    default: "standard"
+    description: "SKU for Key Vault."
+    enum: ["standard", "premium"]
+
+outputs:
+  - name: "key_vault_id"
+    description: "The ID of the created Key Vault"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Key Vault Configuration"
+      fields:
+        - name: "name"
+          label: "Key Vault Name"
+          component: "text-input"
+          placeholder: "my-keyvault"
+          help: "3-24 characters, alphanumeric or hyphens. Must be globally unique."
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "my-resource-group"
+          help: "Existing resource group name."
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "tenant_id"
+          label: "Tenant ID"
+          component: "text-input"
+          placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          help: "Azure AD tenant GUID."
+
+        - name: "sku_name"
+          label: "SKU"
+          component: "select"
+          options:
+            - label: "Standard"
+              value: "standard"
+            - label: "Premium"
+              value: "premium"

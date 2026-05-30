@@ -12,6 +12,7 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
     public DbSet<DeploymentInputEntity> DeploymentInputs => Set<DeploymentInputEntity>();
     public DbSet<DeploymentOutputEntity> DeploymentOutputs => Set<DeploymentOutputEntity>();
     public DbSet<DeploymentLogEntity> DeploymentLogs => Set<DeploymentLogEntity>();
+    public DbSet<StorageAccount> StorageAccounts => Set<StorageAccount>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -145,6 +146,17 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
                 .WithMany(x => x.Logs)
                 .HasForeignKey(x => x.DeploymentId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StorageAccount>(entity =>
+        {
+            entity.ToTable("storage_accounts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(255);
+            entity.Property(x => x.Region).HasColumnName("region").HasMaxLength(50);
+            entity.Property(x => x.ResourceGroup).HasColumnName("resource_group").HasMaxLength(255);
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
         });
     }
 }

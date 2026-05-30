@@ -1,0 +1,113 @@
+name: "storage-account"
+version: "1.0.0"
+description: "Azure Storage Account - general purpose v2 storage"
+terraform_path: "terraform-modules/storage-account"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Storage account name (3-24 lowercase letters and numbers)"
+    validation:
+      pattern: "^[a-z0-9]{3,24}$"
+      message: "Name must be 3-24 lowercase letters and numbers"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group where the storage account will be created"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region for the storage account"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "account_tier"
+    type: "string"
+    required: false
+    default: "Standard"
+    description: "Storage account performance tier"
+    enum: ["Standard", "Premium"]
+
+  - name: "account_replication_type"
+    type: "string"
+    required: false
+    default: "LRS"
+    description: "Storage replication option"
+    enum: ["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"]
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags to apply to the storage account"
+
+outputs:
+  - name: "id"
+    description: "The ID of the created storage account"
+
+  - name: "name"
+    description: "The name of the created storage account"
+
+  - name: "primary_blob_endpoint"
+    description: "Primary blob endpoint URL"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Storage Account Configuration"
+      fields:
+        - name: "name"
+          label: "Storage Account Name"
+          component: "text-input"
+          placeholder: "stazselfservicedev01"
+          help: "3-24 lowercase letters and numbers only"
+
+        - name: "resource_group_name"
+          label: "Resource Group Name"
+          component: "text-input"
+          placeholder: "rg-azselfservice-dev"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "account_tier"
+          label: "Performance Tier"
+          component: "select"
+          options:
+            - label: "Standard"
+              value: "Standard"
+            - label: "Premium"
+              value: "Premium"
+
+        - name: "account_replication_type"
+          label: "Replication"
+          component: "select"
+          options:
+            - label: "Locally Redundant (LRS)"
+              value: "LRS"
+            - label: "Geo-Redundant (GRS)"
+              value: "GRS"
+            - label: "Read-Access Geo-Redundant (RAGRS)"
+              value: "RAGRS"
+            - label: "Zone-Redundant (ZRS)"
+              value: "ZRS"
+            - label: "Geo-Zone-Redundant (GZRS)"
+              value: "GZRS"
+            - label: "Read-Access Geo-Zone-Redundant (RAGZRS)"
+              value: "RAGZRS"

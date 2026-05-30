@@ -6,6 +6,7 @@ using AzSelfService.API.Data.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using AzSelfService.API.Services;
 
 namespace AzSelfService.API.Tests;
 
@@ -23,9 +24,11 @@ public sealed class AdminCustomersControllerTests
                 CustomerName = "Dummy Tenant",
                 SubscriptionId = "sub-123",
                 TenantId = "tenant-123",
+                SpClientId = "11111111-1111-1111-1111-111111111111",
+                SpClientSecret = "very-secret-value",
                 Username = "dummy-admin",
                 Password = "Test@1234",
-                SpClientSecretSecretRef = " customers/dummy/sp-client-secret "
+                SpClientSecretSecretRef = " customers-dummy-sp-client-secret "
             },
             CancellationToken.None);
 
@@ -38,7 +41,7 @@ public sealed class AdminCustomersControllerTests
         var customer = await db.Customers.SingleAsync(x => x.Id == payload.CustomerId);
         Assert.Equal("Dummy Tenant", customer.Name);
         Assert.Equal("sub-123", customer.SubscriptionId);
-        Assert.Equal("customers/dummy/sp-client-secret", customer.SpClientSecretSecretRef);
+        Assert.Equal("customers-dummy-sp-client-secret", customer.SpClientSecretSecretRef);
 
         var user = await db.Users.SingleAsync(x => x.Id == payload.UserId);
         Assert.Equal(customer.Id, user.CustomerId);
@@ -68,6 +71,8 @@ public sealed class AdminCustomersControllerTests
                 CustomerName = "Dummy Tenant",
                 SubscriptionId = "sub-123",
                 TenantId = "tenant-999",
+                SpClientId = "11111111-1111-1111-1111-111111111111",
+                SpClientSecret = "very-secret-value",
                 Username = "dummy-admin-2",
                 Password = "Test@1234"
             },
@@ -88,6 +93,8 @@ public sealed class AdminCustomersControllerTests
                 CustomerName = "Dummy Tenant",
                 SubscriptionId = "sub-123",
                 TenantId = "tenant-123",
+                SpClientId = "11111111-1111-1111-1111-111111111111",
+                SpClientSecret = "very-secret-value",
                 Username = "dummy-admin",
                 Password = "Test@1234"
             },
@@ -98,7 +105,7 @@ public sealed class AdminCustomersControllerTests
 
     private static AdminCustomersController CreateController(AzSelfServiceDbContext db, string username, string role)
     {
-        return new AdminCustomersController(db)
+        return new AdminCustomersController(db, new FakeCustomerCredentialProvisioningService())
         {
             ControllerContext = new ControllerContext
             {
@@ -108,6 +115,30 @@ public sealed class AdminCustomersControllerTests
                 }
             }
         };
+    }
+
+    private sealed class FakeCustomerCredentialProvisioningService : ICustomerCredentialProvisioningService
+    {
+        public Task<CustomerCredentialProvisioningResult> ProvisionAsync(
+            Guid customerId,
+            string spClientId,
+            string spClientSecret,
+            string tenantId,
+            string subscriptionId,
+            string? spClientIdSecretRef,
+            string? spClientSecretSecretRef,
+            string? spTenantIdSecretRef,
+            string? spSubscriptionIdSecretRef,
+            CancellationToken cancellationToken)
+        {
+            var prefix = $"customer-{customerId:N}";
+            return Task.FromResult(
+                CustomerCredentialProvisioningResult.Success(
+                    string.IsNullOrWhiteSpace(spClientIdSecretRef) ? $"{prefix}-sp-client-id" : spClientIdSecretRef.Trim(),
+                    string.IsNullOrWhiteSpace(spClientSecretSecretRef) ? $"{prefix}-sp-client-secret" : spClientSecretSecretRef.Trim(),
+                    string.IsNullOrWhiteSpace(spTenantIdSecretRef) ? $"{prefix}-sp-tenant-id" : spTenantIdSecretRef.Trim(),
+                    string.IsNullOrWhiteSpace(spSubscriptionIdSecretRef) ? $"{prefix}-sp-subscription-id" : spSubscriptionIdSecretRef.Trim()));
+        }
     }
 
     private static ClaimsPrincipal BuildPrincipal(string username, string role)

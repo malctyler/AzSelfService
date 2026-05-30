@@ -84,6 +84,21 @@ make up
 #   Login:     admin / Test@1234
 ```
 
+### Windows (Docker Desktop + PowerShell)
+
+If you are on Windows, the repo includes native PowerShell scripts that work directly with Docker Desktop (no WSL/Git Bash required):
+
+```powershell
+# Run from repository root
+.\scripts\dev-setup.ps1
+.\scripts\dev-up.ps1
+
+# Later, stop services
+.\scripts\dev-down.ps1
+```
+
+If startup fails, ensure Docker Desktop is running and that `docker compose version` succeeds in PowerShell.
+
 ### Development Workflow: Choose Your Approach
 
 #### Approach 1: Docker Compose + Terminal (Recommended, Simplest)
@@ -222,6 +237,22 @@ Tenant and subscription are read from customer metadata (`tenant_id`, `subscript
 For repeatable local setup using CLIXML and `.env`, see:
 
 - [Local Key Vault Development Runbook](docs/architecture/local-keyvault-dev-runbook.md)
+
+### Device Move Recovery
+
+If you switch machines, use the rehydration script to recreate the CLIXML credential, refresh `.env`, upload the customer secret, and patch the active customer row.
+
+```powershell
+.\scripts\repair-dev-machine.ps1 `
+  -ServicePrincipalAppId '<appid>' `
+  -ServicePrincipalSecret '<secret>' `
+  -TenantId '<tenant-guid>' `
+  -SubscriptionId '<subscription-guid>'
+```
+
+By default, the script uses `$HOME\CredentialStore\PROD-Automation.clixml`.
+
+Override `-CustomerSecretRef` if you want a different Key Vault secret name than `starting-secret`.
 
 ### Starting Development
 

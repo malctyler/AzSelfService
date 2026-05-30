@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AzSelfService.API.Contracts;
 using AzSelfService.API.Data;
 using AzSelfService.API.Data.Entities;
@@ -16,8 +17,34 @@ namespace AzSelfService.API.Controllers;
 [Authorize]
 public sealed class DeploymentsController(
     AzSelfServiceDbContext dbContext,
-    CustomerCredentialPreflightService preflightService) : ControllerBase
+    CustomerCredentialPreflightService preflightService,
+    StorageAccountNameAvailabilityService? storageAccountNameAvailabilityService = null) : ControllerBase
 {
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ManagedResourceResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ManagedResourceResponse>>> GetManagedResources(CancellationToken cancellationToken)
+    {
+        var customerId = User.GetRequiredCustomerId();
+
+        var deployments = await dbContext.Deployments
+            .Include(x => x.Module)
+            .Include(x => x.Input)
+            .Include(x => x.Output)
+            .Where(x => x.CustomerId == customerId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.UpdatedAt)
+            .ToListAsync(cancellationToken);
+
+        var managedResources = deployments
+            .Where(x => !string.IsNullOrWhiteSpace(x.TerraformStatePath))
+            .GroupBy(x => NormalizeStatePath(x.TerraformStatePath!), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Select(ToManagedResourceResponse)
+            .ToList();
+
+        return Ok(managedResources);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(DeploymentCreatedResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -53,6 +80,41 @@ public sealed class DeploymentsController(
             });
         }
 
+        var module = await dbContext.Modules
+            .SingleOrDefaultAsync(x => x.Id == request.ModuleId && x.IsPublished && !x.IsDeprecated, cancellationToken);
+
+        if (module is null)
+        {
+            return NotFound(new { message = "Module not found." });
+        }
+
+        var validationError = ValidateInputsAgainstSchema(module.Schema, request.Inputs);
+        if (validationError is not null)
+        {
+            return BadRequest(new { message = validationError });
+        }
+
+        // Fast-fail for globally unavailable storage account names before full credential preflight.
+        if (string.Equals(module.Name, "storage-account", StringComparison.OrdinalIgnoreCase)
+            && storageAccountNameAvailabilityService is not null
+            && request.Inputs.TryGetProperty("name", out var storageAccountNameElement)
+            && storageAccountNameElement.ValueKind == JsonValueKind.String)
+        {
+            var storageAccountName = storageAccountNameElement.GetString() ?? string.Empty;
+            var nameAvailability = await storageAccountNameAvailabilityService.CheckAsync(
+                customer,
+                storageAccountName,
+                cancellationToken);
+
+            if (!nameAvailability.IsAvailable)
+            {
+                return BadRequest(new
+                {
+                    message = nameAvailability.Message ?? "Storage account name is not available globally."
+                });
+            }
+        }
+
         var preflight = await preflightService.CheckAsync(customer, cancellationToken);
         if (!preflight.CanProceed)
         {
@@ -62,14 +124,6 @@ public sealed class DeploymentsController(
                 issues = preflight.Issues,
                 warnings = preflight.Warnings
             });
-        }
-
-        var module = await dbContext.Modules
-            .SingleOrDefaultAsync(x => x.Id == request.ModuleId && x.IsPublished && !x.IsDeprecated, cancellationToken);
-
-        if (module is null)
-        {
-            return NotFound(new { message = "Module not found." });
         }
 
         var now = DateTime.UtcNow;
@@ -197,6 +251,136 @@ public sealed class DeploymentsController(
         return Ok(logs);
     }
 
+    [HttpPost("check-storage-name")]
+    [ProducesResponseType(typeof(StorageNameAvailabilityCheckResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<StorageNameAvailabilityCheckResponse>> CheckStorageAccountName(
+        [FromBody] CheckStorageAccountNameRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest(new { message = "Storage account name is required." });
+        }
+
+        if (storageAccountNameAvailabilityService is null)
+        {
+            return BadRequest(new { message = "Storage account availability check is not configured." });
+        }
+
+        var customerId = User.GetRequiredCustomerId();
+        var customer = await dbContext.Customers
+            .SingleOrDefaultAsync(x => x.Id == customerId && x.IsActive, cancellationToken);
+
+        if (customer is null)
+        {
+            return BadRequest(new { message = "Customer is not active or does not exist." });
+        }
+
+        if (string.IsNullOrWhiteSpace(customer.TenantId) 
+            || string.IsNullOrWhiteSpace(customer.SubscriptionId))
+        {
+            return BadRequest(new
+            {
+                message = "Customer subscription/tenant configuration is incomplete."
+            });
+        }
+
+        var result = await storageAccountNameAvailabilityService.CheckAsync(customer, request.Name, cancellationToken);
+        
+        return Ok(new StorageNameAvailabilityCheckResponse
+        {
+            IsAvailable = result.IsAvailable,
+            Message = result.Message,
+            NameChecked = request.Name
+        });
+    }
+
+    private static string? ValidateInputsAgainstSchema(string? schemaJson, JsonElement inputs)
+    {
+        if (string.IsNullOrWhiteSpace(schemaJson) || inputs.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        using var schemaDocument = JsonDocument.Parse(schemaJson);
+        var root = schemaDocument.RootElement;
+
+        if (root.TryGetProperty("required", out var required)
+            && required.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var requiredField in required.EnumerateArray())
+            {
+                var fieldName = requiredField.GetString();
+                if (string.IsNullOrWhiteSpace(fieldName))
+                {
+                    continue;
+                }
+
+                if (!inputs.TryGetProperty(fieldName, out var value)
+                    || value.ValueKind == JsonValueKind.Null
+                    || (value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString())))
+                {
+                    return $"{fieldName} is required.";
+                }
+            }
+        }
+
+        if (!root.TryGetProperty("properties", out var properties)
+            || properties.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var schemaProperty in properties.EnumerateObject())
+        {
+            if (!inputs.TryGetProperty(schemaProperty.Name, out var inputValue))
+            {
+                continue;
+            }
+
+            var propertySchema = schemaProperty.Value;
+
+            if (propertySchema.TryGetProperty("type", out var typeElement))
+            {
+                var propertyType = typeElement.GetString();
+                if (string.Equals(propertyType, "object", StringComparison.OrdinalIgnoreCase)
+                    && inputValue.ValueKind != JsonValueKind.Object)
+                {
+                    return propertySchema.TryGetProperty("description", out var objectDescription)
+                        ? objectDescription.GetString()
+                        : $"{schemaProperty.Name} must be an object.";
+                }
+            }
+
+            if (inputValue.ValueKind == JsonValueKind.String
+                && propertySchema.TryGetProperty("pattern", out var patternElement))
+            {
+                var pattern = patternElement.GetString();
+                var rawValue = inputValue.GetString() ?? string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(pattern) && !Regex.IsMatch(rawValue, pattern))
+                {
+                    if (propertySchema.TryGetProperty("validationMessage", out var validationMessage)
+                        && !string.IsNullOrWhiteSpace(validationMessage.GetString()))
+                    {
+                        return validationMessage.GetString();
+                    }
+
+                    if (propertySchema.TryGetProperty("description", out var description)
+                        && !string.IsNullOrWhiteSpace(description.GetString()))
+                    {
+                        return description.GetString();
+                    }
+
+                    return $"{schemaProperty.Name} is invalid.";
+                }
+            }
+        }
+
+        return null;
+    }
+
     [HttpPost("{id:guid}/destroy")]
     [ProducesResponseType(typeof(DeploymentCreatedResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -283,5 +467,68 @@ public sealed class DeploymentsController(
                 Status = destroyDeployment.Status,
                 CreatedAtUtc = destroyDeployment.CreatedAt
             });
+    }
+
+    private static ManagedResourceResponse ToManagedResourceResponse(DeploymentEntity deployment)
+    {
+        var inputs = JsonHelpers.ParseNullableJson(deployment.Input?.Inputs);
+        var outputs = JsonHelpers.ParseNullableJson(deployment.Output?.Outputs);
+
+        var resourceName = GetJsonString(outputs, "name")
+            ?? GetJsonString(inputs, "name");
+
+        var resourceLocation = GetJsonString(outputs, "location")
+            ?? GetJsonString(inputs, "location");
+
+        var resourceId = GetJsonString(outputs, "id");
+
+        return new ManagedResourceResponse
+        {
+            DeploymentId = deployment.Id,
+            ModuleId = deployment.ModuleId,
+            ModuleName = deployment.Module?.Name ?? string.Empty,
+            ModuleVersion = deployment.Module?.Version ?? string.Empty,
+            Status = deployment.Status,
+            ResourceName = resourceName ?? deployment.Module?.Name ?? deployment.Id.ToString("N"),
+            ResourceLocation = resourceLocation ?? string.Empty,
+            ResourceId = resourceId ?? string.Empty,
+            TerraformStatePath = deployment.TerraformStatePath,
+            CreatedAtUtc = deployment.CreatedAt,
+            UpdatedAtUtc = deployment.UpdatedAt,
+            CompletedAtUtc = deployment.CompletedAt
+        };
+    }
+
+    private static string NormalizeStatePath(string statePath)
+        => statePath.Replace('\\', '/').Trim();
+
+    private static string? GetJsonString(JsonElement? element, string propertyName)
+    {
+        if (element is null || element.Value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!element.Value.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Object && property.TryGetProperty("value", out var valueElement))
+        {
+            if (valueElement.ValueKind == JsonValueKind.String)
+            {
+                return valueElement.GetString();
+            }
+
+            return valueElement.ToString();
+        }
+
+        if (property.ValueKind == JsonValueKind.String)
+        {
+            return property.GetString();
+        }
+
+        return property.ToString();
     }
 }

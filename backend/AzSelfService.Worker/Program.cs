@@ -21,6 +21,12 @@ builder.Services.Configure<WorkerOptions>(options =>
     options.TerraformWorkingDirectory = builder.Configuration["WORKER_TERRAFORM_WORKING_DIR"] ?? "/tmp/terraform";
     options.AzureStorageAccountName = builder.Configuration["Azure:Storage:AccountName"] ?? "";
     options.AzureStorageContainerName = builder.Configuration["Azure:Storage:ContainerName"] ?? "customer-tfstate";
+    
+    // Platform backend credentials (separate from customer provider credentials)
+    options.AzureStorageBackendAccessKey = builder.Configuration["Azure:Storage:BackendAccessKey"];
+    options.AzureStorageBackendSasToken = builder.Configuration["Azure:Storage:BackendSasToken"];
+    options.AzureStorageBackendSubscriptionId = builder.Configuration["Azure:Storage:BackendSubscriptionId"];
+    options.AzureStorageBackendResourceGroup = builder.Configuration["Azure:Storage:BackendResourceGroup"];
 });
 
 builder.Services.AddSingleton(_ =>

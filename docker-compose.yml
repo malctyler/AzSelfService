@@ -115,6 +115,10 @@ services:
       - WORKER_TERRAFORM_BINARY_PATH=${WORKER_TERRAFORM_BINARY_PATH:-terraform}
       - WORKER_REPOSITORY_ROOT_PATH=${WORKER_REPOSITORY_ROOT_PATH:-/app}
       - WORKER_TERRAFORM_WORKING_DIR=${WORKER_TERRAFORM_WORKING_DIR:-/tmp/terraform}
+      - Azure__Storage__BackendAccessKey=${AZURE_STORAGE_BACKEND_ACCESS_KEY:-}
+      - Azure__Storage__BackendSasToken=${AZURE_STORAGE_BACKEND_SAS_TOKEN:-}
+      - Azure__Storage__BackendSubscriptionId=${AZURE_STORAGE_BACKEND_SUBSCRIPTION_ID:-}
+      - Azure__Storage__BackendResourceGroup=${AZURE_STORAGE_BACKEND_RESOURCE_GROUP:-}
     ports:
       - "5001:5001"
     volumes:

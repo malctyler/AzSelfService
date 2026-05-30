@@ -32,6 +32,22 @@ public sealed class DeploymentDetailsResponse
     public JsonElement? Outputs { get; init; }
 }
 
+public sealed class ManagedResourceResponse
+{
+    public Guid DeploymentId { get; init; }
+    public Guid ModuleId { get; init; }
+    public string ModuleName { get; init; } = string.Empty;
+    public string ModuleVersion { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public string ResourceName { get; init; } = string.Empty;
+    public string ResourceLocation { get; init; } = string.Empty;
+    public string ResourceId { get; init; } = string.Empty;
+    public string? TerraformStatePath { get; init; }
+    public DateTime CreatedAtUtc { get; init; }
+    public DateTime UpdatedAtUtc { get; init; }
+    public DateTime? CompletedAtUtc { get; init; }
+}
+
 public sealed class DeploymentLogResponse
 {
     public long Id { get; init; }

@@ -132,10 +132,22 @@ public sealed class TerraformExecutionService(
             throw new InvalidOperationException("AzureStorageAccountName must be configured for remote Terraform state.");
         }
 
-        return $"init -input=false -no-color -reconfigure" +
-               $" -backend-config=\"storage_account_name={accountName}\"" +
-               $" -backend-config=\"container_name={containerName}\"" +
-               $" -backend-config=\"key={stateKey}\"";
+        var initArgs = $"init -input=false -no-color -reconfigure" +
+                       $" -backend-config=\"storage_account_name={accountName}\"" +
+                       $" -backend-config=\"container_name={containerName}\"" +
+                       $" -backend-config=\"key={stateKey}\"";
+
+        // Add platform backend authentication (use access key or SAS token, not customer credentials)
+        if (!string.IsNullOrWhiteSpace(_options.AzureStorageBackendAccessKey))
+        {
+            initArgs += $" -backend-config=\"access_key={_options.AzureStorageBackendAccessKey}\"";
+        }
+        else if (!string.IsNullOrWhiteSpace(_options.AzureStorageBackendSasToken))
+        {
+            initArgs += $" -backend-config=\"sas_token={_options.AzureStorageBackendSasToken}\"";
+        }
+
+        return initArgs;
     }
 
     private async Task EnsureRemoteStateHasResourcesAsync(
@@ -180,10 +192,56 @@ public sealed class TerraformExecutionService(
                 continue;
             }
 
+            if (ShouldTreatAsObject(property.Name))
+            {
+                filtered[property.Name] = NormalizeObjectInput(property.Name, property.Value);
+                continue;
+            }
+
             filtered[property.Name] = property.Value.Clone();
         }
 
         return JsonSerializer.Serialize(filtered);
+    }
+
+    private static bool ShouldTreatAsObject(string propertyName)
+    {
+        return propertyName.Equals("tags", StringComparison.OrdinalIgnoreCase)
+               || propertyName.EndsWith("_tags", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static JsonElement NormalizeObjectInput(string propertyName, JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            return value.Clone();
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var rawText = value.GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(rawText))
+            {
+                return JsonSerializer.SerializeToElement(new Dictionary<string, string>());
+            }
+
+            try
+            {
+                using var parsedDocument = JsonDocument.Parse(rawText);
+                if (parsedDocument.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    return parsedDocument.RootElement.Clone();
+                }
+            }
+            catch (JsonException)
+            {
+                // Fall through to the empty object fallback below.
+            }
+
+            return JsonSerializer.SerializeToElement(new Dictionary<string, string>());
+        }
+
+        return value.Clone();
     }
 
     private async Task<string> RunTerraformCommandAsync(
@@ -211,12 +269,18 @@ public sealed class TerraformExecutionService(
             }
         };
 
+        // Provider credentials: customer SP for resource provisioning in customer subscription
         process.StartInfo.Environment["ARM_CLIENT_ID"] = credentials.ClientId;
         process.StartInfo.Environment["ARM_CLIENT_SECRET"] = credentials.ClientSecret;
         process.StartInfo.Environment["ARM_TENANT_ID"] = credentials.TenantId;
         process.StartInfo.Environment["ARM_SUBSCRIPTION_ID"] = credentials.SubscriptionId;
         process.StartInfo.Environment["ARM_USE_AZUREAD"] = "true";
+        
+        // Terraform automation mode
         process.StartInfo.Environment["TF_IN_AUTOMATION"] = "1";
+        
+        // Note: Backend authentication (access_key or sas_token) is passed via init backend-config args.
+        // This ensures backend state access uses platform credentials, not customer SP credentials.
 
         process.OutputDataReceived += (_, eventArgs) =>
         {

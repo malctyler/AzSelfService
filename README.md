@@ -249,6 +249,20 @@ appid={service-principal-app-id}
 
 The platform reads tenant and subscription from customer metadata (`tenant_id`, `subscription_id`), and reads only the client secret from Key Vault.
 
+### Device Move Recovery
+
+If you move to a new machine, the easiest way back to a working state is to run the rehydration script. It recreates the CLIXML credential, updates `.env`, uploads the customer secret to Key Vault, and patches the customer row in PostgreSQL.
+
+```powershell
+.\scripts\repair-dev-machine.ps1 `
+  -ServicePrincipalAppId '<appid>' `
+  -ServicePrincipalSecret '<secret>' `
+  -TenantId '<tenant-guid>' `
+  -SubscriptionId '<subscription-guid>'
+```
+
+By default, the script uses `$HOME\CredentialStore\PROD-Automation.clixml`.
+
 ---
 
 ## 📖 Usage Example

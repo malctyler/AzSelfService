@@ -18,8 +18,12 @@ builder.Services.AddDbContext<AzSelfServiceDbContext>(options =>
 
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<CustomerCredentialPreflightService>();
+builder.Services.AddScoped<ICustomerCredentialProvisioningService, CustomerCredentialProvisioningService>();
 builder.Services.AddScoped<KeyVaultReadinessService>();
+builder.Services.AddScoped<StorageAccountNameAvailabilityService>();
+builder.Services.AddScoped<KeyVaultNameAvailabilityService>();
 builder.Services.AddSingleton<ModuleManifestLoader>();
+builder.Services.AddHttpClient();
 
 var keyVaultUrl = builder.Configuration["Azure:KeyVault:Url"];
 if (!string.IsNullOrWhiteSpace(keyVaultUrl))

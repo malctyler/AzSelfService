@@ -97,6 +97,12 @@ public sealed class ModuleManifestLoader(IHostEnvironment hostEnvironment)
                     && patternRaw is not null)
                 {
                     property["pattern"] = patternRaw.ToString();
+
+                    if (validation.TryGetValue("message", out var messageRaw)
+                        && messageRaw is not null)
+                    {
+                        property["validationMessage"] = messageRaw.ToString();
+                    }
                 }
 
                 properties[name] = property;

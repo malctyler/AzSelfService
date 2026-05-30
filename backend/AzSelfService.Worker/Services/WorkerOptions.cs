@@ -12,4 +12,10 @@ public sealed class WorkerOptions
     public string TerraformWorkingDirectory { get; set; } = "/tmp/terraform";
     public string AzureStorageAccountName { get; set; } = "";
     public string AzureStorageContainerName { get; set; } = "customer-tfstate";
+    
+    // Platform-owned backend credentials for Terraform state access (not customer credentials)
+    public string? AzureStorageBackendAccessKey { get; set; }
+    public string? AzureStorageBackendSasToken { get; set; }
+    public string? AzureStorageBackendSubscriptionId { get; set; }
+    public string? AzureStorageBackendResourceGroup { get; set; }
 }
