@@ -235,8 +235,7 @@ export default function DeploymentPage() {
     // If user lands on queued redeploy step, jump to destroy step for live progress.
     if (deployment.status === 'QUEUED'
       && typeof dependsOnDeploymentId === 'string'
-      && dependsOnDeploymentId !== deploymentId)
-    {
+      && dependsOnDeploymentId !== deploymentId) {
       autoRedirectRef.current = true
       setActionMessage(`Rebuild is waiting on destroy step ${dependsOnDeploymentId}. Redirecting...`)
       router.push(`/deployment/${dependsOnDeploymentId}`)
@@ -246,8 +245,7 @@ export default function DeploymentPage() {
     // When destroy step finishes, automatically continue to queued/running redeploy.
     if (deployment.status === 'ROLLED_BACK'
       && typeof nextDeploymentId === 'string'
-      && nextDeploymentId !== deploymentId)
-    {
+      && nextDeploymentId !== deploymentId) {
       autoRedirectRef.current = true
       setActionMessage(`Destroy step completed. Redirecting to redeploy step ${nextDeploymentId}...`)
       router.push(`/deployment/${nextDeploymentId}`)

@@ -308,17 +308,17 @@ export default function ModulesPage() {
   const hasTenantIdField = Object.prototype.hasOwnProperty.call(properties, 'tenant_id')
   const importResourceLabel =
     isStorageAccountModule ? 'Storage Account' :
-    isKeyVaultModule ? 'Key Vault' :
-    isVirtualNetworkModule ? 'Virtual Network' :
-    isNetworkSecurityGroupModule ? 'Network Security Group' :
-    isNetworkSecurityRuleModule ? 'Network Security Rule' :
-    isPublicIpModule ? 'Public IP' :
-    isLocalNetworkGatewayModule ? 'Local Network Gateway' :
-    isVirtualNetworkGatewayModule ? 'Virtual Network Gateway' :
-    isVirtualNetworkPeeringModule ? 'Virtual Network Peering' :
-    isBastionHostModule ? 'Bastion Host' :
-    isSubnetModule ? 'Subnet' :
-    'Resource'
+      isKeyVaultModule ? 'Key Vault' :
+        isVirtualNetworkModule ? 'Virtual Network' :
+          isNetworkSecurityGroupModule ? 'Network Security Group' :
+            isNetworkSecurityRuleModule ? 'Network Security Rule' :
+              isPublicIpModule ? 'Public IP' :
+                isLocalNetworkGatewayModule ? 'Local Network Gateway' :
+                  isVirtualNetworkGatewayModule ? 'Virtual Network Gateway' :
+                    isVirtualNetworkPeeringModule ? 'Virtual Network Peering' :
+                      isBastionHostModule ? 'Bastion Host' :
+                        isSubnetModule ? 'Subnet' :
+                          'Resource'
   const availableResourceGroupNames = useMemo(() => {
     const uniqueNames = new Set(
       managedResources
@@ -1145,10 +1145,10 @@ export default function ModulesPage() {
                         <div key={fieldName} style={{ marginBottom: 12 }}>
                           <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>
                             {fieldName === 'domain_name' ? 'Domain FQDN' :
-                             fieldName === 'domain_join_username' ? 'Join Account' :
-                             fieldName === 'domain_join_password' ? 'Join Account Password' :
-                             fieldName === 'dns_servers' ? 'DC / DNS Server IPs *' :
-                             'Target OU (optional)'}
+                              fieldName === 'domain_join_username' ? 'Join Account' :
+                                fieldName === 'domain_join_password' ? 'Join Account Password' :
+                                  fieldName === 'dns_servers' ? 'DC / DNS Server IPs *' :
+                                    'Target OU (optional)'}
                           </label>
                           <input
                             value={formValues[fieldName] || ''}
@@ -1157,10 +1157,10 @@ export default function ModulesPage() {
                             style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
                             placeholder={
                               fieldName === 'domain_name' ? 'corp.example.com' :
-                              fieldName === 'domain_join_username' ? 'CORP\\svc-domainjoin' :
-                              fieldName === 'domain_join_password' ? '' :
-                              fieldName === 'dns_servers' ? '10.0.0.4' :
-                              'OU=Servers,DC=corp,DC=example,DC=com'
+                                fieldName === 'domain_join_username' ? 'CORP\\svc-domainjoin' :
+                                  fieldName === 'domain_join_password' ? '' :
+                                    fieldName === 'dns_servers' ? '10.0.0.4' :
+                                      'OU=Servers,DC=corp,DC=example,DC=com'
                             }
                             spellCheck={false}
                             autoCapitalize="none"

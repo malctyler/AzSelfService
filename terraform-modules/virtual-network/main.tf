@@ -48,7 +48,7 @@ locals {
       prefix                      = cidrsubnet(local.normalized_address_space, local.subnet_newbits, idx)
       service_endpoints           = local.all_subnet_service_endpoints[idx]
       network_security_group_name = ""
-      network_security_group_id = ""
+      network_security_group_id   = ""
     }
   }
 
