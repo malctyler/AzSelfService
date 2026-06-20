@@ -1,0 +1,124 @@
+name: "virtual-network-gateway"
+version: "1.0.0"
+description: "Azure Virtual Network Gateway (VPN)"
+terraform_path: "terraform-modules/virtual-network-gateway"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Virtual network gateway name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the gateway"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "type"
+    type: "string"
+    required: false
+    default: "Vpn"
+    enum: ["Vpn", "ExpressRoute"]
+    description: "Gateway type"
+
+  - name: "sku"
+    type: "string"
+    required: false
+    default: "Basic"
+    description: "Gateway SKU"
+
+  - name: "vpn_type"
+    type: "string"
+    required: false
+    default: "RouteBased"
+    enum: ["RouteBased", "PolicyBased"]
+    description: "VPN type"
+
+  - name: "generation"
+    type: "string"
+    required: false
+    default: "Generation1"
+    enum: ["Generation1", "Generation2"]
+    description: "Gateway generation"
+
+  - name: "bgp_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable BGP"
+
+  - name: "ip_configuration"
+    type: "object"
+    required: true
+    description: "Gateway IP configuration object"
+
+  - name: "bgp_settings"
+    type: "object"
+    required: false
+    default:
+      asn: 65515
+      peer_weight: 0
+      ip_configuration_name: "default"
+      apipa_addresses: []
+    description: "BGP settings object"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags"
+
+outputs:
+  - name: "id"
+    description: "ID of the virtual network gateway"
+
+  - name: "name"
+    description: "Name of the virtual network gateway"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Virtual Network Gateway"
+      fields:
+        - name: "name"
+          label: "Gateway Name"
+          component: "text-input"
+          placeholder: "MJT-01-vng"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "ip_configuration"
+          label: "IP Configuration (JSON)"
+          component: "text-input"
+          placeholder: '{"name":"MJT-01-vnetGatewayConfig","public_ip_address_id":"/subscriptions/.../publicIPAddresses/FIL-01-pip","subnet_id":"/subscriptions/.../subnets/GatewaySubnet"}'
+
+        - name: "tags"
+          label: "Tags (JSON)"
+          component: "text-input"
+          placeholder: '{"Chargeback_ID":"1234","Service":"Test"}'

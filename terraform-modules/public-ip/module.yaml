@@ -1,0 +1,129 @@
+name: "public-ip"
+version: "1.0.0"
+description: "Azure Public IP address"
+terraform_path: "terraform-modules/public-ip"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Public IP resource name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the public IP"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "allocation_method"
+    type: "string"
+    required: false
+    default: "Dynamic"
+    enum: ["Dynamic", "Static"]
+    description: "Public IP allocation method"
+
+  - name: "sku"
+    type: "string"
+    required: false
+    default: "Basic"
+    enum: ["Basic", "Standard"]
+    description: "Public IP SKU"
+
+  - name: "sku_tier"
+    type: "string"
+    required: false
+    default: "Regional"
+    enum: ["Regional", "Global"]
+    description: "Public IP SKU tier"
+
+  - name: "ip_version"
+    type: "string"
+    required: false
+    default: "IPv4"
+    enum: ["IPv4", "IPv6"]
+    description: "IP version"
+
+  - name: "idle_timeout_in_minutes"
+    type: "number"
+    required: false
+    default: 4
+    description: "Idle timeout"
+
+  - name: "ddos_protection_mode"
+    type: "string"
+    required: false
+    default: "VirtualNetworkInherited"
+    description: "DDoS protection mode"
+
+  - name: "zones"
+    type: "array"
+    required: false
+    default: []
+    description: "Availability zones"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags"
+
+outputs:
+  - name: "id"
+    description: "ID of the public IP"
+
+  - name: "ip_address"
+    description: "Assigned public IP address"
+
+  - name: "name"
+    description: "Name of the public IP"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Public IP"
+      fields:
+        - name: "name"
+          label: "Public IP Name"
+          component: "text-input"
+          placeholder: "FIL-01-pip"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "allocation_method"
+          label: "Allocation Method"
+          component: "select"
+          options:
+            - label: "Dynamic"
+              value: "Dynamic"
+            - label: "Static"
+              value: "Static"
+
+        - name: "tags"
+          label: "Tags (JSON)"
+          component: "text-input"
+          placeholder: '{"Chargeback_ID":"1234","Service":"Test"}'

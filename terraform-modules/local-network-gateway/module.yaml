@@ -1,0 +1,103 @@
+name: "local-network-gateway"
+version: "1.0.0"
+description: "Azure Local Network Gateway for site-to-site VPN"
+terraform_path: "terraform-modules/local-network-gateway"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Local network gateway name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the local network gateway"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "gateway_address"
+    type: "string"
+    required: false
+    default: ""
+    description: "On-premises VPN public IP"
+
+  - name: "gateway_fqdn"
+    type: "string"
+    required: false
+    default: ""
+    description: "On-premises VPN device FQDN"
+
+  - name: "address_space"
+    type: "array"
+    required: true
+    description: "Address space reachable through the local gateway"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags"
+
+outputs:
+  - name: "id"
+    description: "ID of the local network gateway"
+
+  - name: "name"
+    description: "Name of the local network gateway"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Local Network Gateway"
+      fields:
+        - name: "name"
+          label: "Gateway Name"
+          component: "text-input"
+          placeholder: "onpremise"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "gateway_address"
+          label: "Gateway Public IP"
+          component: "text-input"
+          placeholder: "89.240.11.120"
+
+        - name: "gateway_fqdn"
+          label: "Gateway FQDN"
+          component: "text-input"
+          placeholder: "vpn.contoso.com"
+
+        - name: "address_space"
+          label: "Address Spaces"
+          component: "text-input"
+          placeholder: '["192.168.1.0/24"]'
+
+        - name: "tags"
+          label: "Tags (JSON)"
+          component: "text-input"
+          placeholder: '{"Chargeback_ID":"1234","Service":"Test"}'

@@ -15,7 +15,8 @@ namespace AzSelfService.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminModulesController(
     AzSelfServiceDbContext dbContext,
-    ModuleManifestLoader manifestLoader) : ControllerBase
+    ModuleManifestLoader manifestLoader,
+    AllowedRegionCatalogService allowedRegionCatalogService) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ModuleSummaryResponse>), StatusCodes.Status200OK)]
@@ -27,13 +28,13 @@ public sealed class AdminModulesController(
             return Forbid();
         }
 
+        var allowedRegionCodes = await allowedRegionCatalogService.GetAllowedRegionCodesAsync(cancellationToken);
         var modules = await dbContext.Modules
             .OrderBy(x => x.Name)
             .ThenByDescending(x => x.Version)
-            .Select(x => ToResponse(x))
             .ToListAsync(cancellationToken);
 
-        return Ok(modules);
+        return Ok(modules.Select(x => ToResponse(x, allowedRegionCodes)).ToList());
     }
 
     [HttpPost("register")]
@@ -52,6 +53,7 @@ public sealed class AdminModulesController(
         try
         {
             var manifest = await manifestLoader.LoadAsync(request.ModulePath, cancellationToken);
+            var allowedRegionCodes = await allowedRegionCatalogService.GetAllowedRegionCodesAsync(cancellationToken);
 
             var module = await dbContext.Modules.SingleOrDefaultAsync(
                 x => x.Name == manifest.Name && x.Version == manifest.Version,
@@ -71,7 +73,7 @@ public sealed class AdminModulesController(
             }
 
             module.TerraformPath = manifest.TerraformPath;
-            module.Schema = manifest.SchemaJson;
+            module.Schema = allowedRegionCatalogService.ApplyAllowedRegionsToSchemaJson(manifest.SchemaJson, allowedRegionCodes) ?? manifest.SchemaJson;
             module.UiSchema = manifest.UiSchemaJson;
             module.Description = manifest.Description;
             module.IsPublished = true;
@@ -80,7 +82,7 @@ public sealed class AdminModulesController(
 
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            return Ok(ToResponse(module));
+            return Ok(ToResponse(module, allowedRegionCodes));
         }
         catch (Exception ex)
         {
@@ -110,7 +112,8 @@ public sealed class AdminModulesController(
         module.UpdatedAt = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(ToResponse(module));
+        var allowedRegionCodes = await allowedRegionCatalogService.GetAllowedRegionCodesAsync(cancellationToken);
+        return Ok(ToResponse(module, allowedRegionCodes));
     }
 
     [HttpPost("{id:guid}/deprecate")]
@@ -135,11 +138,14 @@ public sealed class AdminModulesController(
         module.UpdatedAt = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(ToResponse(module));
+        var allowedRegionCodes = await allowedRegionCatalogService.GetAllowedRegionCodesAsync(cancellationToken);
+        return Ok(ToResponse(module, allowedRegionCodes));
     }
 
-    private static ModuleSummaryResponse ToResponse(ModuleEntity module)
+    private ModuleSummaryResponse ToResponse(ModuleEntity module, IReadOnlyList<string> allowedRegionCodes)
     {
+        var schemaJson = allowedRegionCatalogService.ApplyAllowedRegionsToSchemaJson(module.Schema, allowedRegionCodes) ?? module.Schema;
+
         return new ModuleSummaryResponse
         {
             Id = module.Id,
@@ -149,7 +155,7 @@ public sealed class AdminModulesController(
             Description = module.Description,
             IsPublished = module.IsPublished,
             IsDeprecated = module.IsDeprecated,
-            Schema = JsonHelpers.ParseJsonOrEmpty(module.Schema),
+            Schema = JsonHelpers.ParseJsonOrEmpty(schemaJson),
             UiSchema = JsonHelpers.ParseNullableJson(module.UiSchema)
         };
     }

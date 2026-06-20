@@ -3,6 +3,16 @@ import { useRouter } from 'next/router'
 import { login } from '../lib/api'
 import { useAuthStore } from '../store/auth'
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === 'object' && err !== null && 'response' in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response
+    if (typeof response?.data?.message === 'string' && response.data.message.length > 0) {
+      return response.data.message
+    }
+  }
+  return fallback
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const setSession = useAuthStore((state) => state.setSession)
@@ -33,8 +43,8 @@ export default function LoginPage() {
       const response = await login(username, password)
       setSession(response.token, response.user)
       router.push('/dashboard')
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Login failed.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Login failed.'))
     } finally {
       setIsSubmitting(false)
     }

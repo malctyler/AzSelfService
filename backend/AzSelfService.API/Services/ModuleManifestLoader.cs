@@ -91,6 +91,11 @@ public sealed class ModuleManifestLoader(IHostEnvironment hostEnvironment)
                     property["default"] = ToPlainObject(defaultRaw);
                 }
 
+                if (variable.TryGetValue("sensitive", out var sensitiveRaw) && IsTruthy(sensitiveRaw))
+                {
+                    property["sensitive"] = true;
+                }
+
                 if (variable.TryGetValue("validation", out var validationRaw)
                     && validationRaw is IDictionary<object, object?> validation
                     && validation.TryGetValue("pattern", out var patternRaw)

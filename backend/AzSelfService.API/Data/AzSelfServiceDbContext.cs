@@ -8,6 +8,7 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
     public DbSet<CustomerEntity> Customers => Set<CustomerEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<ModuleEntity> Modules => Set<ModuleEntity>();
+    public DbSet<AllowedRegionEntity> AllowedRegions => Set<AllowedRegionEntity>();
     public DbSet<DeploymentEntity> Deployments => Set<DeploymentEntity>();
     public DbSet<DeploymentInputEntity> DeploymentInputs => Set<DeploymentInputEntity>();
     public DbSet<DeploymentOutputEntity> DeploymentOutputs => Set<DeploymentOutputEntity>();
@@ -67,6 +68,16 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             entity.Property(x => x.IsPublished).HasColumnName("is_published");
             entity.Property(x => x.IsDeprecated).HasColumnName("is_deprecated");
+        });
+
+        modelBuilder.Entity<AllowedRegionEntity>(entity =>
+        {
+            entity.ToTable("allowed_regions");
+            entity.HasKey(x => x.Code);
+            entity.Property(x => x.Code).HasColumnName("code").HasMaxLength(64);
+            entity.Property(x => x.SortOrder).HasColumnName("sort_order");
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
         });
 
         modelBuilder.Entity<DeploymentEntity>(entity =>

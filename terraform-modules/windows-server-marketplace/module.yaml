@@ -1,0 +1,264 @@
+name: "windows-server-marketplace"
+version: "1.0.0"
+description: "Marketplace Windows Server VM with managed networking"
+terraform_path: "terraform-modules/windows-server-marketplace"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Windows VM name"
+    validation:
+      pattern: "^[a-zA-Z0-9-]{1,15}$"
+      message: "Name must be 1-15 characters, alphanumeric or hyphen."
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group where resources are created"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region for the Windows VM"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "sku"
+    type: "string"
+    required: false
+    default: "b2s"
+    description: "VM size SKU selector"
+    enum: ["b2s", "d2s_v5", "d4s_v5"]
+
+  - name: "admin_username"
+    type: "string"
+    required: true
+    description: "Windows local admin username"
+    validation:
+      pattern: "^[a-zA-Z][a-zA-Z0-9_-]{2,19}$"
+      message: "Username must start with a letter and be 3-20 chars."
+
+  - name: "admin_password"
+    type: "string"
+    required: true
+    description: "Windows local admin password"
+
+  - name: "subnet_id"
+    type: "string"
+    required: true
+    description: "ARM resource ID of an existing subnet (from a deployed Virtual Network module)"
+
+  - name: "rdp_allowed_cidr"
+    type: "string"
+    required: false
+    default: "0.0.0.0/0"
+    description: "CIDR allowed inbound RDP (3389)"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags for all resources"
+
+  - name: "domain_name"
+    type: "string"
+    required: false
+    default: ""
+    description: "FQDN of the AD domain to join (e.g. corp.example.com). Leave blank to skip domain join."
+
+  - name: "domain_join_username"
+    type: "string"
+    required: false
+    default: ""
+    description: "Account with permission to join computers to the domain (UPN or DOMAIN\\user format)."
+
+  - name: "domain_join_password"
+    type: "string"
+    required: false
+    default: ""
+    sensitive: true
+    description: "Password for the domain join account."
+
+  - name: "domain_join_ou_path"
+    type: "string"
+    required: false
+    default: ""
+    description: "OU Distinguished Name for the computer account. Leave blank for the default Computers container."
+
+  - name: "dns_servers"
+    type: "array"
+    required: false
+    default: []
+    description: "DC IP addresses to set on the NIC DNS. Required for domain join — must include the IP of your Active Directory domain controller."
+
+  - name: "chocolatey_packages"
+    type: "array"
+    required: false
+    default: []
+    description: "Chocolatey package IDs to install after provisioning (e.g. adobereader, 7zip, googlechrome). Browse packages at chocolatey.org/packages."
+
+  - name: "post_install_script_uri"
+    type: "string"
+    required: false
+    default: ""
+    description: "HTTPS URI of a PowerShell .ps1 script to download and run. For private blobs use a User Delegation SAS URL, or set post_install_use_managed_identity and assign Storage Blob Data Reader to vm_principal_id."
+
+  - name: "post_install_use_managed_identity"
+    type: "boolean"
+    required: false
+    default: false
+    description: "When true the VM uses its system-assigned managed identity to download the script from a private Azure Blob endpoint via IMDS bearer token. No storage account key required."
+
+outputs:
+  - name: "vm_id"
+    description: "ID of the created Windows virtual machine"
+
+  - name: "vm_name"
+    description: "Name of the created Windows virtual machine"
+
+  - name: "public_ip_address"
+    description: "Public IP address assigned to the VM"
+
+  - name: "private_ip_address"
+    description: "Private IP address assigned to the VM NIC"
+
+  - name: "network_interface_id"
+    description: "Network interface ID attached to the VM"
+
+  - name: "vm_principal_id"
+    description: "Object (principal) ID of the VM's system-assigned managed identity. Use this to assign Storage Blob Data Reader on your script container for key-free private blob access."
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Windows Server Configuration"
+      fields:
+        - name: "name"
+          label: "VM Name"
+          component: "text-input"
+          placeholder: "vm-win-marketplace-01"
+          help: "Windows computer name friendly format (1-15 chars)."
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "rg-azselfservice-dev"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "sku"
+          label: "VM Size SKU"
+          component: "select"
+          options:
+            - label: "B2s (default)"
+              value: "b2s"
+            - label: "D2s v5"
+              value: "d2s_v5"
+            - label: "D4s v5"
+              value: "d4s_v5"
+
+        - name: "admin_username"
+          label: "Admin Username"
+          component: "text-input"
+          placeholder: "azadmin"
+
+        - name: "admin_password"
+          label: "Admin Password"
+          component: "text-input"
+          placeholder: "Use a strong password"
+
+        - name: "subnet_id"
+          label: "Subnet"
+          component: "text-input"
+          placeholder: "Select location first to see available subnets"
+          help: "ARM ID of the subnet from a deployed Virtual Network module."
+
+        - name: "rdp_allowed_cidr"
+          label: "RDP Allowed CIDR"
+          component: "text-input"
+          placeholder: "203.0.113.10/32"
+          help: "Defaults to 0.0.0.0/0 for dev convenience; lock this down for production."
+
+    - title: "Domain Join (Optional)"
+      collapsible: true
+      collapsed: true
+      fields:
+        - name: "domain_name"
+          label: "Domain FQDN"
+          component: "text-input"
+          placeholder: "corp.example.com"
+          help: "Fully qualified domain name of the Active Directory domain. Leave blank to skip domain join entirely."
+
+        - name: "domain_join_username"
+          label: "Join Account"
+          component: "text-input"
+          placeholder: "CORP\\svc-domainjoin  or  svc-domainjoin@corp.example.com"
+          help: "Service account with 'Add workstations to domain' rights. Avoid using a full Domain Admin."
+          show_if:
+            field: "domain_name"
+            operator: "not_empty"
+
+        - name: "domain_join_password"
+          label: "Join Account Password"
+          component: "secret-input"
+          help: "Password for the join account. Stored in Terraform state — ensure the backend storage account uses encryption at rest and restrict access accordingly."
+          show_if:
+            field: "domain_name"
+            operator: "not_empty"
+
+        - name: "domain_join_ou_path"
+          label: "Target OU (optional)"
+          component: "text-input"
+          placeholder: "OU=Servers,DC=corp,DC=example,DC=com"
+          help: "Distinguished Name of the OU where the computer account will be created. Leave blank for the default Computers container."
+          show_if:
+            field: "domain_name"
+            operator: "not_empty"
+
+        - name: "dns_servers"
+          label: "DC / DNS Server IPs"
+          component: "text-input"
+          placeholder: "10.0.0.4"
+          help: "IP address(es) of your Active Directory domain controller, comma-separated (e.g. 10.0.0.4,10.0.0.5). This is set as the NIC DNS so the VM can locate a DC at boot. Required when Domain FQDN is set."
+          show_if:
+            field: "domain_name"
+            operator: "not_empty"
+
+    - title: "Post-Build Software (Optional)"
+      collapsible: true
+      collapsed: true
+      fields:
+        - name: "chocolatey_packages"
+          label: "Software Packages"
+          component: "tag-input"
+          placeholder: "e.g. adobereader"
+          help: "Chocolatey package IDs to install after provisioning. Leave blank to skip. Browse available packages at https://community.chocolatey.org/packages — common examples: adobereader, 7zip, googlechrome, vscode, notepadplusplus."
+
+        - name: "post_install_script_uri"
+          label: "Custom Script URI"
+          component: "text-input"
+          placeholder: "https://mystorage.blob.core.windows.net/scripts/install.ps1"
+          help: "HTTPS URI of a PowerShell script to run instead of the Chocolatey packages above. For private blobs, use a User Delegation SAS URL (generated via Azure AD — no account key needed) or enable Managed Identity Access below."
+
+        - name: "post_install_use_managed_identity"
+          label: "Managed Identity Access"
+          component: "checkbox"
+          help: "When enabled the VM downloads the script using its system-assigned managed identity via IMDS bearer token — no storage account key is required. After the first deployment, assign Storage Blob Data Reader on your container to the vm_principal_id shown in the deployment outputs."
+          show_if:
+            field: "post_install_script_uri"
+            operator: "not_empty"

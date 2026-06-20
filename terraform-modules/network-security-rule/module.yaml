@@ -1,0 +1,116 @@
+name: "network-security-rule"
+version: "1.0.0"
+description: "Azure Network Security Rule"
+terraform_path: "terraform-modules/network-security-rule"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Network security rule name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the NSG"
+
+  - name: "network_security_group_name"
+    type: "string"
+    required: true
+    description: "Network security group name"
+
+  - name: "priority"
+    type: "number"
+    required: true
+    description: "Rule priority"
+
+  - name: "direction"
+    type: "string"
+    required: true
+    enum: ["Inbound", "Outbound"]
+    description: "Traffic direction"
+
+  - name: "access"
+    type: "string"
+    required: true
+    enum: ["Allow", "Deny"]
+    description: "Allow or deny"
+
+  - name: "protocol"
+    type: "string"
+    required: true
+    description: "Protocol (Tcp, Udp, Icmp, or *)"
+
+  - name: "source_address_prefix"
+    type: "string"
+    required: false
+    default: "*"
+    description: "Source address prefix"
+
+  - name: "destination_address_prefix"
+    type: "string"
+    required: false
+    default: "*"
+    description: "Destination address prefix"
+
+  - name: "source_port_range"
+    type: "string"
+    required: false
+    default: "*"
+    description: "Source port range"
+
+  - name: "destination_port_range"
+    type: "string"
+    required: false
+    default: "*"
+    description: "Destination port range"
+
+outputs:
+  - name: "id"
+    description: "ID of the rule"
+
+  - name: "name"
+    description: "Name of the rule"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Network Security Rule"
+      fields:
+        - name: "name"
+          label: "Rule Name"
+          component: "text-input"
+          placeholder: "AllowMJT-AzureNetwork"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "network_security_group_name"
+          label: "NSG Name"
+          component: "text-input"
+          placeholder: "MJT-01-VDI-nsg"
+
+        - name: "priority"
+          label: "Priority"
+          component: "text-input"
+          placeholder: "500"
+
+        - name: "direction"
+          label: "Direction"
+          component: "select"
+          options:
+            - label: "Inbound"
+              value: "Inbound"
+            - label: "Outbound"
+              value: "Outbound"
+
+        - name: "access"
+          label: "Access"
+          component: "select"
+          options:
+            - label: "Allow"
+              value: "Allow"
+            - label: "Deny"
+              value: "Deny"

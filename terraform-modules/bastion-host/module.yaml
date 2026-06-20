@@ -1,0 +1,171 @@
+name: "bastion-host"
+version: "1.0.0"
+description: "Azure Bastion Host (Developer, Basic, or Standard SKU)"
+terraform_path: "terraform-modules/bastion-host"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Bastion host name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the bastion host"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "sku"
+    type: "string"
+    required: false
+    default: "Developer"
+    enum: ["Developer", "Basic", "Standard"]
+    description: "Bastion SKU"
+
+  - name: "virtual_network_id"
+    type: "string"
+    required: false
+    default: ""
+    description: "Used for Developer SKU"
+
+  - name: "subnet_id"
+    type: "string"
+    required: false
+    default: ""
+    description: "Used for Basic/Standard SKUs (AzureBastionSubnet)"
+
+  - name: "public_ip_address_id"
+    type: "string"
+    required: false
+    default: ""
+    description: "Used for Basic/Standard SKUs"
+
+  - name: "scale_units"
+    type: "number"
+    required: false
+    default: 2
+    description: "Bastion scale units"
+
+  - name: "copy_paste_enabled"
+    type: "boolean"
+    required: false
+    default: true
+    description: "Enable copy and paste"
+
+  - name: "file_copy_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable file copy"
+
+  - name: "ip_connect_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable IP connect"
+
+  - name: "kerberos_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable Kerberos"
+
+  - name: "session_recording_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable session recording"
+
+  - name: "shareable_link_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable shareable links"
+
+  - name: "tunneling_enabled"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Enable tunneling"
+
+  - name: "zones"
+    type: "array"
+    required: false
+    default: []
+    description: "Availability zones"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags"
+
+outputs:
+  - name: "id"
+    description: "ID of the bastion host"
+
+  - name: "name"
+    description: "Name of the bastion host"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Bastion Host"
+      fields:
+        - name: "name"
+          label: "Bastion Name"
+          component: "text-input"
+          placeholder: "MJT-01-vn-bastion"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "sku"
+          label: "SKU"
+          component: "select"
+          options:
+            - label: "Developer"
+              value: "Developer"
+            - label: "Basic"
+              value: "Basic"
+            - label: "Standard"
+              value: "Standard"
+
+        - name: "virtual_network_id"
+          label: "Virtual Network ID (Developer SKU)"
+          component: "text-input"
+          placeholder: "/subscriptions/.../virtualNetworks/MJT-01-vn"
+
+        - name: "subnet_id"
+          label: "Bastion Subnet ID (Basic/Standard)"
+          component: "text-input"
+          placeholder: "/subscriptions/.../subnets/AzureBastionSubnet"
+
+        - name: "public_ip_address_id"
+          label: "Public IP ID (Basic/Standard)"
+          component: "text-input"
+          placeholder: "/subscriptions/.../publicIPAddresses/my-bastion-pip"

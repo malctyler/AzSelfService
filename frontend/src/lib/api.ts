@@ -65,10 +65,26 @@ export type ModuleSummary = {
       pattern?: string
       description?: string
       validationMessage?: string
+      sensitive?: boolean
     }>
     required?: string[]
   }
   uiSchema?: unknown
+}
+
+export type AllowedRegion = {
+  code: string
+  sortOrder: number
+}
+
+export async function getAllowedRegions(): Promise<AllowedRegion[]> {
+  const response = await apiClient.get<AllowedRegion[]>('/api/admin/regions')
+  return response.data
+}
+
+export async function updateAllowedRegions(codes: string[]): Promise<AllowedRegion[]> {
+  const response = await apiClient.put<AllowedRegion[]>('/api/admin/regions', { codes })
+  return response.data
 }
 
 export type DeploymentDetails = {
@@ -227,6 +243,117 @@ export async function createDeployment(moduleId: string, inputs: Record<string, 
   return response.data
 }
 
+export type ArmLookupResult = {
+  resourceId: string
+  location: string
+  existingTags: Record<string, string>
+}
+
+export type ImportResourceOption = {
+  name: string
+  resourceId: string
+  location: string
+  existingTags: Record<string, string>
+  summary: string
+  parentName?: string
+}
+
+// Keep old name as alias
+export type ResourceGroupLookupResult = ArmLookupResult
+
+export async function lookupResourceGroup(name: string): Promise<ArmLookupResult> {
+  const response = await apiClient.get<ArmLookupResult>('/api/deployments/lookup-resource-group', {
+    params: { name }
+  })
+  return response.data
+}
+
+export async function lookupStorageAccount(name: string, resourceGroup: string): Promise<ArmLookupResult> {
+  const response = await apiClient.get<ArmLookupResult>('/api/deployments/lookup-storage-account', {
+    params: { name, resourceGroup }
+  })
+  return response.data
+}
+
+export type StorageAccountSummary = {
+  name: string
+  resourceId: string
+  location: string
+  existingTags: Record<string, string>
+}
+
+export async function listStorageAccounts(resourceGroup: string): Promise<StorageAccountSummary[]> {
+  const response = await apiClient.get<StorageAccountSummary[]>('/api/deployments/list-storage-accounts', {
+    params: { resourceGroup }
+  })
+  return response.data
+}
+
+export type KeyVaultSummary = {
+  name: string
+  resourceId: string
+  location: string
+  existingTags: Record<string, string>
+}
+
+export async function listKeyVaults(resourceGroup: string): Promise<KeyVaultSummary[]> {
+  const response = await apiClient.get<KeyVaultSummary[]>('/api/deployments/list-key-vaults', {
+    params: { resourceGroup }
+  })
+  return response.data
+}
+
+export type VirtualNetworkSubnet = {
+  name: string
+  subnetId: string
+  addressPrefix: string
+}
+
+export type VirtualNetworkSummary = {
+  name: string
+  resourceId: string
+  location: string
+  addressSpace: string
+  subnets: VirtualNetworkSubnet[]
+  existingTags: Record<string, string>
+}
+
+export async function listVirtualNetworks(resourceGroup: string): Promise<VirtualNetworkSummary[]> {
+  const response = await apiClient.get<VirtualNetworkSummary[]>('/api/deployments/list-virtual-networks', {
+    params: { resourceGroup }
+  })
+  return response.data
+}
+
+export async function listImportOptions(moduleId: string, resourceGroup: string): Promise<ImportResourceOption[]> {
+  const response = await apiClient.get<ImportResourceOption[]>('/api/deployments/import-options', {
+    params: { moduleId, resourceGroup }
+  })
+  return response.data
+}
+
+export async function importDeployment(
+  moduleId: string,
+  payload: {
+    resourceName?: string
+    parentResourceName?: string
+    resourceGroupName?: string
+    environment?: string
+    storageAccountName?: string
+    storageAccountResourceGroup?: string
+    keyVaultName?: string
+    keyVaultResourceGroup?: string
+    virtualNetworkName?: string
+    virtualNetworkResourceGroup?: string
+  }
+) {
+  const response = await apiClient.post<{ id: string; status: string; createdAtUtc: string }>('/api/deployments/import', {
+    moduleId,
+    ...payload
+  })
+  return response.data
+}
+
 export type StorageNameAvailabilityCheckResult = {
   nameChecked: string
   isAvailable: boolean
@@ -250,6 +377,61 @@ export async function getManagedResources(): Promise<ManagedResourceSummary[]> {
   return response.data
 }
 
+export type VNetInfo = {
+  deploymentId: string
+  vnetName: string
+  location: string
+  subnetName: string
+  subnetId: string
+  addressPrefix?: string
+}
+
+export async function getVNetDeployments(): Promise<VNetInfo[]> {
+  const summaries = await getManagedResources()
+  const vnetSummaries = summaries.filter(
+    (s) => s.moduleName === 'virtual-network' && s.status === 'SUCCEEDED'
+  )
+  const details = await Promise.all(
+    vnetSummaries.map((s) => getDeployment(s.deploymentId))
+  )
+  return details.flatMap((d) => {
+    const vnetName = (d.outputs?.vnet_name as { value?: unknown } | undefined)?.value
+    const locationRaw = d.inputs?.location
+    if (typeof vnetName !== 'string' || typeof locationRaw !== 'string') {
+      return []
+    }
+
+    const subnetDetails = (d.outputs?.subnet_details as { value?: unknown } | undefined)?.value
+    if (Array.isArray(subnetDetails)) {
+      return subnetDetails
+        .filter((entry): entry is { name?: unknown; id?: unknown; address_prefix?: unknown } => typeof entry === 'object' && entry !== null)
+        .filter((entry) => typeof entry.name === 'string' && typeof entry.id === 'string')
+        .map((entry) => ({
+          deploymentId: d.id,
+          vnetName,
+          location: locationRaw,
+          subnetName: entry.name as string,
+          subnetId: entry.id as string,
+          addressPrefix: typeof entry.address_prefix === 'string' ? entry.address_prefix : undefined
+        }))
+    }
+
+    const subnetName = (d.outputs?.subnet_name as { value?: unknown } | undefined)?.value
+    const subnetId = (d.outputs?.subnet_id as { value?: unknown } | undefined)?.value
+    if (typeof subnetName !== 'string' || typeof subnetId !== 'string') {
+      return []
+    }
+
+    return [{
+      deploymentId: d.id,
+      vnetName,
+      location: locationRaw,
+      subnetName,
+      subnetId
+    }]
+  })
+}
+
 export async function getDeploymentLogs(id: string, sinceId?: number): Promise<DeploymentLog[]> {
   const response = await apiClient.get<DeploymentLog[]>(`/api/deployments/${id}/logs`, {
     params: sinceId ? { sinceId } : undefined
@@ -260,6 +442,25 @@ export async function getDeploymentLogs(id: string, sinceId?: number): Promise<D
 export async function destroyDeployment(id: string): Promise<{ id: string; status: string; createdAtUtc: string }> {
   const response = await apiClient.post<{ id: string; status: string; createdAtUtc: string }>(`/api/deployments/${id}/destroy`)
   return response.data
+}
+
+export async function retryDeployment(id: string, inputs: Record<string, unknown>): Promise<{ id: string; status: string; createdAtUtc: string }> {
+  const response = await apiClient.post<{ id: string; status: string; createdAtUtc: string }>(`/api/deployments/${id}/retry`, { inputs })
+  return response.data
+}
+
+export async function rebuildDeployment(id: string): Promise<{ destroyDeploymentId: string; redeployDeploymentId: string; status: string; createdAtUtc: string }> {
+  const response = await apiClient.post<{ destroyDeploymentId: string; redeployDeploymentId: string; status: string; createdAtUtc: string }>(`/api/deployments/${id}/rebuild`)
+  return response.data
+}
+
+export async function rebuildAllDeployments(): Promise<{ batchId: string; deploymentCount: number; destroyCount: number; redeployCount: number }> {
+  const response = await apiClient.post<{ batchId: string; deploymentCount: number; destroyCount: number; redeployCount: number }>('/api/deployments/rebuild-all')
+  return response.data
+}
+
+export async function deleteFailedDeployment(id: string): Promise<void> {
+  await apiClient.delete(`/api/deployments/${id}`)
 }
 
 export type StorageAccount = {

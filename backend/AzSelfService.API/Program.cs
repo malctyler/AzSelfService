@@ -22,6 +22,11 @@ builder.Services.AddScoped<ICustomerCredentialProvisioningService, CustomerCrede
 builder.Services.AddScoped<KeyVaultReadinessService>();
 builder.Services.AddScoped<StorageAccountNameAvailabilityService>();
 builder.Services.AddScoped<KeyVaultNameAvailabilityService>();
+builder.Services.AddScoped<ResourceGroupLookupService>();
+builder.Services.AddScoped<ImportResourceDiscoveryService>();
+builder.Services.AddScoped<AllowedRegionCatalogService>();
+builder.Services.AddScoped<DatabaseBootstrapper>();
+builder.Services.AddScoped<ModuleCatalogBootstrapper>();
 builder.Services.AddSingleton<ModuleManifestLoader>();
 builder.Services.AddHttpClient();
 
@@ -103,6 +108,15 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var bootstrapper = scope.ServiceProvider.GetRequiredService<DatabaseBootstrapper>();
+    await bootstrapper.EnsureInfrastructureAsync(CancellationToken.None);
+
+    var moduleCatalogBootstrapper = scope.ServiceProvider.GetRequiredService<ModuleCatalogBootstrapper>();
+    await moduleCatalogBootstrapper.EnsureModulesRegisteredAsync(CancellationToken.None);
+}
 
 if (app.Environment.IsDevelopment())
 {

@@ -1,0 +1,81 @@
+name: "virtual-network-peering"
+version: "1.0.0"
+description: "Azure Virtual Network Peering"
+terraform_path: "terraform-modules/virtual-network-peering"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Peering name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the local virtual network"
+
+  - name: "virtual_network_name"
+    type: "string"
+    required: true
+    description: "Local virtual network name"
+
+  - name: "remote_virtual_network_id"
+    type: "string"
+    required: true
+    description: "Resource ID of the remote virtual network"
+
+  - name: "allow_virtual_network_access"
+    type: "boolean"
+    required: false
+    default: true
+    description: "Allow virtual network access"
+
+  - name: "allow_forwarded_traffic"
+    type: "boolean"
+    required: false
+    default: true
+    description: "Allow forwarded traffic"
+
+  - name: "allow_gateway_transit"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Allow gateway transit"
+
+  - name: "use_remote_gateways"
+    type: "boolean"
+    required: false
+    default: false
+    description: "Use remote gateways"
+
+outputs:
+  - name: "id"
+    description: "ID of the peering"
+
+  - name: "name"
+    description: "Name of the peering"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Virtual Network Peering"
+      fields:
+        - name: "name"
+          label: "Peering Name"
+          component: "text-input"
+          placeholder: "366to210"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "virtual_network_name"
+          label: "Local VNet Name"
+          component: "text-input"
+          placeholder: "MJT-01-vn"
+
+        - name: "remote_virtual_network_id"
+          label: "Remote VNet Resource ID"
+          component: "text-input"
+          placeholder: "/subscriptions/.../virtualNetworks/TestNetwork"

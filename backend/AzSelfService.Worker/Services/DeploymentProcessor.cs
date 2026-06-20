@@ -42,6 +42,8 @@ public sealed class DeploymentProcessor(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<WorkerDbContext>();
 
+        await RecoverStaleRunningDeploymentsAsync(db, cancellationToken);
+
         var queuedDeployments = await db.Deployments
             .Where(x => x.Status == "QUEUED")
             .OrderBy(x => x.CreatedAt)
@@ -52,6 +54,49 @@ public sealed class DeploymentProcessor(
         {
             await ProcessDeploymentAsync(deployment.Id, cancellationToken);
         }
+    }
+
+    private async Task RecoverStaleRunningDeploymentsAsync(WorkerDbContext db, CancellationToken cancellationToken)
+    {
+        if (_options.MaxRunningMinutes <= 0)
+        {
+            return;
+        }
+
+        var cutoff = DateTime.UtcNow.AddMinutes(-_options.MaxRunningMinutes);
+        var staleRunning = await db.Deployments
+            .Where(x => x.Status == "RUNNING" && x.UpdatedAt < cutoff)
+            .ToListAsync(cancellationToken);
+
+        if (staleRunning.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var deployment in staleRunning)
+        {
+            deployment.Status = "FAILED";
+            deployment.CompletedAt = now;
+            deployment.UpdatedAt = now;
+            deployment.ErrorMessage ??= "Deployment exceeded max running duration and was marked failed by the worker watchdog.";
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        foreach (var deployment in staleRunning)
+        {
+            await WriteLogAsync(db, deployment.Id, "ERROR", "Deployment auto-failed by worker watchdog due to stale RUNNING status.", new
+            {
+                maxRunningMinutes = _options.MaxRunningMinutes,
+                cutoffUtc = cutoff
+            }, cancellationToken);
+        }
+
+        logger.LogWarning(
+            "Auto-failed {Count} stale RUNNING deployment(s) older than {MaxRunningMinutes} minutes.",
+            staleRunning.Count,
+            _options.MaxRunningMinutes);
     }
 
     private async Task ProcessDeploymentAsync(Guid deploymentId, CancellationToken cancellationToken)
@@ -214,6 +259,22 @@ public sealed class DeploymentProcessor(
             });
         }
 
+        if (string.Equals(operation, TerraformExecutionService.OperationImport, StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteLogAsync(db, deployment.Id, "INFO", "terraform import azurerm_resource_group.rg", null, cancellationToken);
+            await Task.Delay(1200, cancellationToken);
+
+            return JsonSerializer.Serialize(new
+            {
+                deploymentId = deployment.Id,
+                moduleId = deployment.ModuleId,
+                simulated = true,
+                operation,
+                statePath = deployment.TerraformStatePath,
+                imported = true
+            });
+        }
+
         await WriteLogAsync(db, deployment.Id, "INFO", "terraform plan", null, cancellationToken);
         await Task.Delay(700, cancellationToken);
 
@@ -279,6 +340,11 @@ public sealed class DeploymentProcessor(
                 if (string.Equals(operation, TerraformExecutionService.OperationDestroy, StringComparison.OrdinalIgnoreCase))
                 {
                     return TerraformExecutionService.OperationDestroy;
+                }
+
+                if (string.Equals(operation, TerraformExecutionService.OperationImport, StringComparison.OrdinalIgnoreCase))
+                {
+                    return TerraformExecutionService.OperationImport;
                 }
             }
         }

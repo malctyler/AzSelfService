@@ -1,8 +1,26 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import { deprecateModule, getAdminModules, publishModule, registerModule, type ModuleSummary } from '../../lib/api'
+import {
+  deprecateModule,
+  getAdminModules,
+  getAllowedRegions,
+  publishModule,
+  registerModule,
+  updateAllowedRegions,
+  type ModuleSummary
+} from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === 'object' && err !== null && 'response' in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response
+    if (typeof response?.data?.message === 'string' && response.data.message.length > 0) {
+      return response.data.message
+    }
+  }
+  return fallback
+}
 
 export default function AdminModulesPage() {
   const router = useRouter()
@@ -12,6 +30,7 @@ export default function AdminModulesPage() {
 
   const [modules, setModules] = useState<ModuleSummary[]>([])
   const [modulePath, setModulePath] = useState('terraform-modules/resource-group')
+  const [regionCodesText, setRegionCodesText] = useState('')
   const [isBusy, setIsBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -37,11 +56,13 @@ export default function AdminModulesPage() {
 
   const refreshModules = async () => {
     try {
-      const data = await getAdminModules()
+      const [data, regions] = await Promise.all([getAdminModules(), getAllowedRegions()])
       setModules(data)
+      setRegionCodesText(regions.map((region) => region.code).join('\n'))
+      setMessage(null)
     } catch {
       setModules([])
-      setMessage('Failed to load admin modules.')
+      setMessage('Failed to load admin module data.')
     }
   }
 
@@ -50,11 +71,11 @@ export default function AdminModulesPage() {
     setMessage(null)
 
     try {
-      const module = await registerModule(modulePath)
+      const registeredModule = await registerModule(modulePath)
       await refreshModules()
-      setMessage(`Registered ${module.name} v${module.version}.`)
-    } catch (err: any) {
-      setMessage(err?.response?.data?.message || 'Failed to register module.')
+      setMessage(`Registered ${registeredModule.name} v${registeredModule.version}.`)
+    } catch (err: unknown) {
+      setMessage(getErrorMessage(err, 'Failed to register module.'))
     } finally {
       setIsBusy(false)
     }
@@ -68,8 +89,29 @@ export default function AdminModulesPage() {
       await publishModule(id)
       await refreshModules()
       setMessage(`Published ${name} v${version}.`)
-    } catch (err: any) {
-      setMessage(err?.response?.data?.message || 'Failed to publish module.')
+    } catch (err: unknown) {
+      setMessage(getErrorMessage(err, 'Failed to publish module.'))
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  const handleSaveRegions = async () => {
+    setIsBusy(true)
+    setMessage(null)
+
+    try {
+      const codes = regionCodesText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+
+      const updated = await updateAllowedRegions(codes)
+      setRegionCodesText(updated.map((region) => region.code).join('\n'))
+      await refreshModules()
+      setMessage(`Saved ${updated.length} allowed regions.`)
+    } catch (err: unknown) {
+      setMessage(getErrorMessage(err, 'Failed to save allowed regions.'))
     } finally {
       setIsBusy(false)
     }
@@ -83,8 +125,8 @@ export default function AdminModulesPage() {
       await deprecateModule(id)
       await refreshModules()
       setMessage(`Deprecated ${name} v${version}.`)
-    } catch (err: any) {
-      setMessage(err?.response?.data?.message || 'Failed to deprecate module.')
+    } catch (err: unknown) {
+      setMessage(getErrorMessage(err, 'Failed to deprecate module.'))
     } finally {
       setIsBusy(false)
     }
@@ -108,6 +150,22 @@ export default function AdminModulesPage() {
         />
         <button onClick={handleRegister} disabled={isBusy || modulePath.trim().length === 0}>
           Register Module
+        </button>
+      </section>
+
+      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Allowed Azure Regions</h2>
+        <p style={{ color: '#555' }}>
+          One Azure region code per line. This list is applied to every module location dropdown and backend validation.
+        </p>
+        <textarea
+          value={regionCodesText}
+          onChange={(event) => setRegionCodesText(event.target.value)}
+          style={{ width: '100%', minHeight: 180, padding: 8, marginBottom: 10, fontFamily: 'monospace' }}
+          placeholder={'eastus\nwestus\neastus2\nwesteurope'}
+        />
+        <button onClick={handleSaveRegions} disabled={isBusy}>
+          Save Regions
         </button>
       </section>
 

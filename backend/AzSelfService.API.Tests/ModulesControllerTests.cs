@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AzSelfService.API.Controllers;
 using AzSelfService.API.Data;
 using AzSelfService.API.Data.Entities;
+using AzSelfService.API.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,13 +17,16 @@ public sealed class ModulesControllerTests
         var moduleId = Guid.NewGuid();
 
         await using var db = CreateDbContext();
+        db.AllowedRegions.AddRange(
+            new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new AllowedRegionEntity { Code = "uksouth", SortOrder = 1, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
         db.Modules.Add(new ModuleEntity
         {
             Id = moduleId,
             Name = "resource-group",
             Version = "1.0.0",
             TerraformPath = "terraform-modules/resource-group",
-            Schema = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}",
+            Schema = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"location\":{\"type\":\"string\",\"enum\":[\"eastus\",\"westus\"]}}}",
             UiSchema = "{\"layout\":\"vertical\"}",
             Description = "RG",
             IsPublished = true,
@@ -40,6 +44,8 @@ public sealed class ModulesControllerTests
         var payload = Assert.IsType<AzSelfService.API.Contracts.ModuleSummaryResponse>(ok.Value);
         Assert.Equal(moduleId, payload.Id);
         Assert.Equal("resource-group", payload.Name);
+        var locationEnum = payload.Schema.GetProperty("properties").GetProperty("location").GetProperty("enum");
+        Assert.Equal(["eastus", "uksouth"], locationEnum.EnumerateArray().Select(x => x.GetString()).ToArray());
     }
 
     [Fact]
@@ -68,7 +74,7 @@ public sealed class ModulesControllerTests
 
     private static ModulesController CreateController(AzSelfServiceDbContext db)
     {
-        return new ModulesController(db)
+        return new ModulesController(db, new AllowedRegionCatalogService(db))
         {
             ControllerContext = new ControllerContext
             {

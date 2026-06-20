@@ -14,6 +14,7 @@ builder.Services.Configure<WorkerOptions>(options =>
     options.PollIntervalMs = builder.Configuration.GetValue<int?>("WORKER_POLL_INTERVAL_MS") ?? 5000;
     options.MaxRetries = builder.Configuration.GetValue<int?>("WORKER_MAX_RETRIES") ?? 3;
     options.BatchSize = builder.Configuration.GetValue<int?>("WORKER_BATCH_SIZE") ?? 5;
+    options.MaxRunningMinutes = builder.Configuration.GetValue<int?>("WORKER_MAX_RUNNING_MINUTES") ?? 30;
     options.SecretExpiryWarningDays = builder.Configuration.GetValue<int?>("WORKER_SECRET_EXPIRY_WARNING_DAYS") ?? 30;
     options.TerraformExecutionMode = builder.Configuration["WORKER_TERRAFORM_EXECUTION_MODE"] ?? "simulate";
     options.TerraformBinaryPath = builder.Configuration["WORKER_TERRAFORM_BINARY_PATH"] ?? "terraform";

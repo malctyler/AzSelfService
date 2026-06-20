@@ -22,6 +22,8 @@ public sealed class AdminModulesControllerTests
         try
         {
             await using var db = CreateDbContext();
+            db.AllowedRegions.Add(new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
             var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
             var controller = CreateController(db, loader, username: "standard-user");
 
@@ -43,6 +45,7 @@ public sealed class AdminModulesControllerTests
         try
         {
             await using var db = CreateDbContext();
+            db.AllowedRegions.Add(new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
             db.Modules.AddRange(
                 new ModuleEntity
                 {
@@ -95,6 +98,8 @@ public sealed class AdminModulesControllerTests
         try
         {
             await using var db = CreateDbContext();
+            db.AllowedRegions.Add(new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
             var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
             var controller = CreateController(db, loader, username: "standard-user");
 
@@ -141,6 +146,10 @@ public sealed class AdminModulesControllerTests
                 """);
 
             await using var db = CreateDbContext();
+            db.AllowedRegions.AddRange(
+                new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new AllowedRegionEntity { Code = "uksouth", SortOrder = 1, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
             var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
             var controller = CreateController(db, loader, username: "admin");
 
@@ -164,6 +173,7 @@ public sealed class AdminModulesControllerTests
             Assert.True(root.TryGetProperty("properties", out var properties));
             Assert.True(properties.TryGetProperty("name", out _));
             Assert.True(properties.TryGetProperty("location", out _));
+            Assert.Equal(["eastus", "uksouth"], properties.GetProperty("location").GetProperty("enum").EnumerateArray().Select(x => x.GetString()).ToArray());
             Assert.True(root.TryGetProperty("required", out var required));
             Assert.Contains("name", required.EnumerateArray().Select(x => x.GetString()));
             Assert.Contains("location", required.EnumerateArray().Select(x => x.GetString()));
@@ -205,6 +215,8 @@ public sealed class AdminModulesControllerTests
         try
         {
             await using var db = CreateDbContext();
+            db.AllowedRegions.Add(new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
             var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
             var controller = CreateController(db, loader, username: "standard-user");
 
@@ -228,6 +240,7 @@ public sealed class AdminModulesControllerTests
             var moduleId = Guid.NewGuid();
 
             await using var db = CreateDbContext();
+            db.AllowedRegions.Add(new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
             db.Modules.Add(new ModuleEntity
             {
                 Id = moduleId,
@@ -275,6 +288,8 @@ public sealed class AdminModulesControllerTests
         try
         {
             await using var db = CreateDbContext();
+            db.AllowedRegions.Add(new AllowedRegionEntity { Code = "eastus", SortOrder = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
             var loader = new ModuleManifestLoader(new TestHostEnvironment(rootPath));
             var controller = CreateController(db, loader, username: "admin");
 
@@ -293,7 +308,7 @@ public sealed class AdminModulesControllerTests
         ModuleManifestLoader loader,
         string username)
     {
-        return new AdminModulesController(db, loader)
+        return new AdminModulesController(db, loader, new AllowedRegionCatalogService(db))
         {
             ControllerContext = new ControllerContext
             {

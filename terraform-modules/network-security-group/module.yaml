@@ -1,0 +1,82 @@
+name: "network-security-group"
+version: "1.0.0"
+description: "Azure Network Security Group with optional inline rules"
+terraform_path: "terraform-modules/network-security-group"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Network Security Group name"
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group containing the NSG"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "security_rules"
+    type: "array"
+    required: false
+    default: []
+    description: "Optional NSG rules as an array of objects"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags"
+
+outputs:
+  - name: "id"
+    description: "ID of the NSG"
+
+  - name: "name"
+    description: "Name of the NSG"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Network Security Group"
+      fields:
+        - name: "name"
+          label: "NSG Name"
+          component: "text-input"
+          placeholder: "MJT-01-VDI-nsg"
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "MJT-AZNetwork-NE-01-rg"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "security_rules"
+          label: "Security Rules (JSON Array)"
+          component: "text-input"
+          placeholder: "[{\"name\":\"AllowMJT-AzureNetwork\",\"priority\":500,...}]"
+
+        - name: "tags"
+          label: "Tags (JSON)"
+          component: "text-input"
+          placeholder: '{"Chargeback_ID":"1234","Service":"Test"}'

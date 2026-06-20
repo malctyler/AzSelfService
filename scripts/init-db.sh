@@ -83,6 +83,16 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE INDEX IF NOT EXISTS idx_modules_is_published ON modules(is_published);
     COMMENT ON TABLE modules IS 'Terraform modules as self-describing products';
 
+    -- Allowed regions table (shared location dropdown configuration)
+    CREATE TABLE IF NOT EXISTS allowed_regions (
+        code VARCHAR(64) PRIMARY KEY,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_allowed_regions_sort_order ON allowed_regions(sort_order);
+    COMMENT ON TABLE allowed_regions IS 'Shared Azure region catalog used across module location dropdowns';
+
     -- Deployments table (audit trail)
     CREATE TABLE IF NOT EXISTS deployments (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -174,6 +184,16 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     FROM customers 
     WHERE subscription_id = 'dev-subscription-123'
     ON CONFLICT (customer_id, username) DO NOTHING;
+
+    INSERT INTO allowed_regions (code, sort_order)
+    VALUES
+        ('eastus', 0),
+        ('westus', 1),
+        ('eastus2', 2),
+        ('westeurope', 3),
+        ('southeastasia', 4),
+        ('northeurope', 5)
+    ON CONFLICT (code) DO NOTHING;
 
     -- Seed Resource Group module
     INSERT INTO modules (name, version, terraform_path, schema, ui_schema, description, is_published, is_deprecated)

@@ -1,0 +1,225 @@
+name: "virtual-network"
+version: "1.4.0"
+description: "Azure Virtual Network with single-state subnet and NSG ownership plus optional legacy generated subnet mode"
+terraform_path: "terraform-modules/virtual-network"
+
+variables:
+  - name: "name"
+    type: "string"
+    required: true
+    description: "Name of the virtual network"
+    validation:
+      pattern: "^[a-zA-Z0-9][a-zA-Z0-9-_.]{0,79}$"
+      message: "Name must be 1-80 chars; start with a letter/digit; alphanumeric, hyphens, underscores, and dots only."
+
+  - name: "resource_group_name"
+    type: "string"
+    required: true
+    description: "Resource group where the VNet is created"
+
+  - name: "location"
+    type: "string"
+    required: true
+    description: "Azure region for the virtual network"
+    enum: ["eastus", "westus", "eastus2", "westeurope", "southeastasia", "northeurope"]
+
+  - name: "address_space"
+    type: "string"
+    required: true
+    default: "10.0.0.0/16"
+    description: "VNet address space in CIDR notation (e.g. 10.0.0.0/16)"
+    validation:
+      pattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[1-2][0-9]|3[0-2])$"
+      message: "Must be a valid CIDR block such as 10.0.0.0/16"
+
+  - name: "subnets"
+    type: "array"
+    required: false
+    default: []
+    description: "Optional explicit subnet definitions (name, address_prefix, service_endpoints, network_security_group_name, network_security_group_id). When network_security_group_name is set, NSG ownership stays in this module/state."
+
+  - name: "nsgs"
+    type: "array"
+    required: false
+    default: []
+    description: "Optional explicit NSG definitions (name, security_rules, tags) managed by this module. Recommended for imported VNets to keep NSG lifecycle in the same state."
+
+  - name: "subnet_count"
+    type: "string"
+    required: false
+    default: "1"
+    description: "Legacy mode only: how many generated subnets to create from the VNet address space (ignored when subnets is provided)"
+    enum: ["1", "2", "3", "4"]
+
+  - name: "subnet_1_service_endpoints"
+    type: "array"
+    required: false
+    default: []
+    description: "Service endpoints for subnet 1 (primary)"
+    enum: ["Microsoft.Storage", "Microsoft.KeyVault"]
+
+  - name: "subnet_2_service_endpoints"
+    type: "array"
+    required: false
+    default: []
+    description: "Service endpoints for subnet 2"
+    enum: ["Microsoft.Storage", "Microsoft.KeyVault"]
+
+  - name: "subnet_3_service_endpoints"
+    type: "array"
+    required: false
+    default: []
+    description: "Service endpoints for subnet 3"
+    enum: ["Microsoft.Storage", "Microsoft.KeyVault"]
+
+  - name: "subnet_4_service_endpoints"
+    type: "array"
+    required: false
+    default: []
+    description: "Service endpoints for subnet 4"
+    enum: ["Microsoft.Storage", "Microsoft.KeyVault"]
+
+  - name: "enable_nsg"
+    type: "string"
+    required: false
+    default: "false"
+    description: "Legacy mode only: creates a single NSG and associates it with generated subnets (ignored when subnets is provided)"
+    enum: ["true", "false"]
+
+  - name: "dns_servers"
+    type: "string"
+    required: false
+    default: ""
+    description: "Comma-separated custom DNS server IPs (leave blank to use Azure default DNS)"
+
+  - name: "tags"
+    type: "object"
+    required: false
+    default: {}
+    description: "Additional tags to apply to all resources"
+
+outputs:
+  - name: "vnet_id"
+    description: "ID of the created virtual network"
+
+  - name: "vnet_name"
+    description: "Name of the created virtual network"
+
+  - name: "vnet_address_space"
+    description: "Address space assigned to the virtual network"
+
+  - name: "subnet_id"
+    description: "ID of the primary subnet"
+
+  - name: "subnet_name"
+    description: "Name of the primary subnet"
+
+  - name: "subnet_details"
+    description: "All managed subnet names, IDs, prefixes, endpoints, and NSG association state"
+
+  - name: "subnet_nsg_associations"
+    description: "Subnet NSG association IDs keyed by subnet index"
+
+  - name: "nsg_ids"
+    description: "NSG IDs managed by this module (explicit NSGs and optional legacy generated NSG)"
+
+  - name: "nsg_id"
+    description: "ID of the legacy module-created NSG (empty when explicit subnet NSG IDs are used or NSG creation is disabled)"
+
+ui_schema:
+  layout: "vertical"
+  sections:
+    - title: "Virtual Network"
+      fields:
+        - name: "name"
+          label: "VNet Name"
+          component: "text-input"
+          placeholder: "vnet-azselfservice-dev"
+          help: "1-80 chars; alphanumeric, hyphens, underscores, dots."
+
+        - name: "resource_group_name"
+          label: "Resource Group"
+          component: "text-input"
+          placeholder: "rg-azselfservice-dev"
+
+        - name: "location"
+          label: "Azure Region"
+          component: "select"
+          options:
+            - label: "East US"
+              value: "eastus"
+            - label: "West US"
+              value: "westus"
+            - label: "East US 2"
+              value: "eastus2"
+            - label: "West Europe"
+              value: "westeurope"
+            - label: "Southeast Asia"
+              value: "southeastasia"
+            - label: "North Europe"
+              value: "northeurope"
+
+        - name: "address_space"
+          label: "VNet Address Space (CIDR)"
+          component: "text-input"
+          placeholder: "10.0.0.0/16"
+          help: "The full IP range for this virtual network."
+
+    - title: "Subnets"
+      fields:
+        - name: "subnet_count"
+          label: "Number of Subnets"
+          component: "select"
+          options:
+            - label: "1"
+              value: "1"
+            - label: "2"
+              value: "2"
+            - label: "3"
+              value: "3"
+            - label: "4"
+              value: "4"
+          help: "Subnets are auto-named as primary, then 2-of-x, 3-of-x, 4-of-x."
+
+        - name: "subnet_1_service_endpoints"
+          label: "Subnet 1 Service Endpoints"
+          component: "multi-select"
+          help: "Applies to subnet name primary."
+
+        - name: "subnet_2_service_endpoints"
+          label: "Subnet 2 Service Endpoints"
+          component: "multi-select"
+          help: "Applies to subnet name 2-of-x (when subnet count is 2+)."
+
+        - name: "subnet_3_service_endpoints"
+          label: "Subnet 3 Service Endpoints"
+          component: "multi-select"
+          help: "Applies to subnet name 3-of-x (when subnet count is 3+)."
+
+        - name: "subnet_4_service_endpoints"
+          label: "Subnet 4 Service Endpoints"
+          component: "multi-select"
+          help: "Applies to subnet name 4-of-x (when subnet count is 4)."
+
+        - name: "enable_nsg"
+          label: "Attach Network Security Group"
+          component: "select"
+          options:
+            - label: "No (default)"
+              value: "false"
+            - label: "Yes"
+              value: "true"
+          help: "Legacy mode only: creates an empty NSG and associates it with generated subnets."
+
+    - title: "Advanced"
+      fields:
+        - name: "dns_servers"
+          label: "Custom DNS Servers"
+          component: "text-input"
+          placeholder: "168.63.129.16, 8.8.8.8"
+          help: "Comma-separated IP addresses. Leave blank to use Azure default DNS."
+
+        - name: "tags"
+          label: "Tags (JSON)"
+          component: "text-input"
+          placeholder: '{"environment":"dev","team":"platform"}'

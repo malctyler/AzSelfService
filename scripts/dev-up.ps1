@@ -78,7 +78,7 @@ if (-not (Test-Path $envFile)) {
 Write-Host "Loaded environment from $envFile"
 Write-Host "Starting Docker Compose services..."
 
-Invoke-Compose -ComposeCommand $composeCommand -Args @('--profile', 'dev', 'up', '-d')
+Invoke-Compose -ComposeCommand $composeCommand -Args @('--profile', 'dev', 'up', '-d', '--build')
 
 Write-Host ""
 Write-Host "Services started."
