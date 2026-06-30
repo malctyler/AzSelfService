@@ -220,13 +220,15 @@ See [deployment guide](infrastructure/README.md) for full instructions.
 Use the bootstrap script to create a starting resource group and an RBAC-enabled Key Vault, then write the Key Vault secret references back into the platform database.
 
 ```powershell
-# 1. Create the bootstrap resource group and Key Vault
-.\scripts\bootstrap-keyvault.ps1 `
+# 1. Create the bootstrap resource group, Key Vault, and storage accounts
+.\scripts\bootstrap-platform-secrets-storage.ps1 `
   -CredentialClixmlPath 'C:\Users\malcolm.COTTAGES\CredentialStore\PROD-Automation.clixml' `
   -TenantId 'bf0465f4-f8c0-4ff4-978d-af5315afa795' `
   -SubscriptionId '5b337264-50ba-4056-bc9f-1a926a433c18' `
   -ResourceGroupName 'rg-azselfservice-bootstrap' `
   -KeyVaultName 'azselfservicebootstrapkv' `
+  -StorageAccountName 'azselfservicetfstate01' `
+  -SoftwareStorageAccountName 'azselfservicesoftware01' `
   -SecretName 'starting-secret'
 
 # 2. Store the Key Vault client-secret reference on the customer record

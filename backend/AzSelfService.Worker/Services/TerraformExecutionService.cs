@@ -571,14 +571,11 @@ public sealed class TerraformExecutionService(
             "resource-group" => "azurerm_resource_group.rg",
             "storage-account" => "azurerm_storage_account.this",
             "keyvault" => "azurerm_key_vault.this",
-            "network-security-group" => "azurerm_network_security_group.this",
-            "network-security-rule" => "azurerm_network_security_rule.this",
             "public-ip" => "azurerm_public_ip.this",
             "local-network-gateway" => "azurerm_local_network_gateway.this",
             "virtual-network-gateway" => "azurerm_virtual_network_gateway.this",
             "virtual-network-peering" => "azurerm_virtual_network_peering.this",
             "bastion-host" => "azurerm_bastion_host.this",
-            "subnet" => "azurerm_subnet.this",
             _ => throw new InvalidOperationException($"Import is not supported for module '{moduleName}'.")
         };
     }

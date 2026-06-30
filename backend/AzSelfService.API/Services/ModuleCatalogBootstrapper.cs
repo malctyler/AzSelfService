@@ -55,8 +55,8 @@ public sealed class ModuleCatalogBootstrapper(
             module.Schema = allowedRegionCatalogService.ApplyAllowedRegionsToSchemaJson(manifest.SchemaJson, allowedRegionCodes) ?? manifest.SchemaJson;
             module.UiSchema = manifest.UiSchemaJson;
             module.Description = manifest.Description;
-            module.IsPublished = true;
-            module.IsDeprecated = false;
+            module.IsPublished = manifest.IsPublished;
+            module.IsDeprecated = manifest.IsDeprecated;
             module.UpdatedAt = now;
         }
 

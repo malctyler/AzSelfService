@@ -644,70 +644,6 @@ public sealed class DeploymentsController(
             vnetMerged["__import_blocks"] = JsonSerializer.SerializeToElement(importBlocks);
             overrideInputsWithMeta = vnetMerged;
         }
-        else if (normalizedModule == "network-security-group")
-        {
-            if (string.IsNullOrWhiteSpace(request.ResourceGroupName))
-                return BadRequest(new { message = "resourceGroupName is required." });
-            var resourceName = string.IsNullOrWhiteSpace(request.ResourceName) ? request.StorageAccountName : request.ResourceName;
-            if (string.IsNullOrWhiteSpace(resourceName))
-                return BadRequest(new { message = "resourceName is required." });
-            if (importResourceDiscoveryService is null)
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Import resource discovery service is not available." });
-
-            var info = await importResourceDiscoveryService.LookupNetworkSecurityGroupAsync(customer, request.ResourceGroupName, resourceName, cancellationToken)
-                ?? throw new InvalidOperationException($"Could not look up network security group '{resourceName}'.");
-
-            lookup = ArmLookupResult.Success(info.ResourceId, info.Location, info.Tags);
-            resolvedInputs = new Dictionary<string, object?>
-            {
-                ["name"] = info.Name,
-                ["resource_group_name"] = info.ResourceGroupName,
-                ["location"] = info.Location,
-                ["security_rules"] = info.SecurityRules,
-                ["tags"] = info.Tags
-            };
-        }
-        else if (normalizedModule == "network-security-rule")
-        {
-            if (string.IsNullOrWhiteSpace(request.ResourceGroupName))
-                return BadRequest(new { message = "resourceGroupName is required." });
-            if (string.IsNullOrWhiteSpace(request.ResourceName))
-                return BadRequest(new { message = "resourceName is required." });
-            if (string.IsNullOrWhiteSpace(request.ParentResourceName))
-                return BadRequest(new { message = "parentResourceName is required." });
-            if (importResourceDiscoveryService is null)
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Import resource discovery service is not available." });
-
-            var info = await importResourceDiscoveryService.LookupNetworkSecurityRuleAsync(
-                customer,
-                request.ResourceGroupName,
-                request.ParentResourceName,
-                request.ResourceName,
-                cancellationToken) ?? throw new InvalidOperationException($"Could not look up network security rule '{request.ResourceName}'.");
-
-            lookup = ArmLookupResult.Success(info.ResourceId, string.Empty, info.Tags);
-            resolvedInputs = new Dictionary<string, object?>
-            {
-                ["name"] = info.Name,
-                ["resource_group_name"] = info.ResourceGroupName,
-                ["network_security_group_name"] = info.NetworkSecurityGroupName,
-                ["priority"] = info.Priority,
-                ["direction"] = info.Direction,
-                ["access"] = info.Access,
-                ["protocol"] = info.Protocol,
-                ["description"] = info.Description,
-                ["source_port_range"] = info.SourcePortRange,
-                ["destination_port_range"] = info.DestinationPortRange,
-                ["source_address_prefix"] = info.SourceAddressPrefix,
-                ["destination_address_prefix"] = info.DestinationAddressPrefix,
-                ["source_port_ranges"] = info.SourcePortRanges,
-                ["destination_port_ranges"] = info.DestinationPortRanges,
-                ["source_address_prefixes"] = info.SourceAddressPrefixes,
-                ["destination_address_prefixes"] = info.DestinationAddressPrefixes,
-                ["source_application_security_group_ids"] = info.SourceApplicationSecurityGroupIds,
-                ["destination_application_security_group_ids"] = info.DestinationApplicationSecurityGroupIds
-            };
-        }
         else if (normalizedModule == "public-ip")
         {
             if (string.IsNullOrWhiteSpace(request.ResourceGroupName))
@@ -859,37 +795,6 @@ public sealed class DeploymentsController(
                 ["tunneling_enabled"] = info.TunnelingEnabled,
                 ["zones"] = info.Zones,
                 ["tags"] = info.Tags
-            };
-        }
-        else if (normalizedModule == "subnet")
-        {
-            if (string.IsNullOrWhiteSpace(request.ResourceGroupName))
-                return BadRequest(new { message = "resourceGroupName is required." });
-            if (string.IsNullOrWhiteSpace(request.ResourceName))
-                return BadRequest(new { message = "resourceName is required." });
-            if (string.IsNullOrWhiteSpace(request.ParentResourceName))
-                return BadRequest(new { message = "parentResourceName is required." });
-            if (importResourceDiscoveryService is null)
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Import resource discovery service is not available." });
-
-            var info = await importResourceDiscoveryService.LookupSubnetAsync(
-                customer,
-                request.ResourceGroupName,
-                request.ParentResourceName,
-                request.ResourceName,
-                cancellationToken) ?? throw new InvalidOperationException($"Could not look up subnet '{request.ResourceName}'.");
-
-            lookup = ArmLookupResult.Success(info.ResourceId, string.Empty, info.Tags);
-            resolvedInputs = new Dictionary<string, object?>
-            {
-                ["name"] = info.Name,
-                ["resource_group_name"] = info.ResourceGroupName,
-                ["virtual_network_name"] = info.VirtualNetworkName,
-                ["address_prefixes"] = info.AddressPrefixes,
-                ["service_endpoints"] = info.ServiceEndpoints,
-                ["default_outbound_access_enabled"] = info.DefaultOutboundAccessEnabled,
-                ["private_endpoint_network_policies"] = info.PrivateEndpointNetworkPolicies,
-                ["private_link_service_network_policies_enabled"] = info.PrivateLinkServiceNetworkPoliciesEnabled
             };
         }
         else

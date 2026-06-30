@@ -35,6 +35,8 @@ public sealed class ModuleManifestLoader(IHostEnvironment hostEnvironment)
         var version = GetRequiredString(root, "version");
         var description = GetOptionalString(root, "description");
         var terraformPath = GetOptionalString(root, "terraform_path") ?? moduleDirectory;
+        var isPublished = GetOptionalBoolean(root, "is_published") ?? true;
+        var isDeprecated = GetOptionalBoolean(root, "is_deprecated") ?? false;
 
         var schemaElement = BuildSchema(root);
         var uiSchemaElement = TryGetElement(root, "ui_schema");
@@ -46,7 +48,9 @@ public sealed class ModuleManifestLoader(IHostEnvironment hostEnvironment)
             Description = description,
             TerraformPath = terraformPath.Replace('\\', '/'),
             SchemaJson = JsonSerializer.Serialize(schemaElement),
-            UiSchemaJson = uiSchemaElement is null ? null : JsonSerializer.Serialize(uiSchemaElement)
+            UiSchemaJson = uiSchemaElement is null ? null : JsonSerializer.Serialize(uiSchemaElement),
+            IsPublished = isPublished,
+            IsDeprecated = isDeprecated
         };
     }
 
@@ -183,6 +187,23 @@ public sealed class ModuleManifestLoader(IHostEnvironment hostEnvironment)
             _ => false
         };
     }
+
+    private static bool? GetOptionalBoolean(IDictionary<object, object?> source, string key)
+    {
+        if (!source.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            bool boolean => boolean,
+            string text when bool.TryParse(text, out var parsed) => parsed,
+            int number => number != 0,
+            long number => number != 0,
+            _ => null
+        };
+    }
 }
 
 public sealed class LoadedModuleManifest
@@ -193,4 +214,6 @@ public sealed class LoadedModuleManifest
     public string? Description { get; init; }
     public string SchemaJson { get; init; } = "{}";
     public string? UiSchemaJson { get; init; }
+    public bool IsPublished { get; init; } = true;
+    public bool IsDeprecated { get; init; }
 }

@@ -36,7 +36,7 @@ Implemented and validated the Phase 2b security flow for single-secret service p
 ### Bootstrap / Local Ops
 
 - Added scripts:
-  - `scripts/bootstrap-keyvault.ps1`
+  - `scripts/bootstrap-platform-secrets-storage.ps1`
   - `scripts/set-customer-keyvault-refs.ps1`
 - Fixed bootstrap RBAC role assignment to use service principal object id (`--assignee-object-id`) with retry logic.
 - Added secret-upload retry and propagation delay handling.

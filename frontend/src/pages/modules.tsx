@@ -237,12 +237,6 @@ export default function ModulesPage() {
   const isResourceGroupModule =
     normalizedModuleName.includes('resourcegroup') ||
     normalizedTerraformPath.includes('resourcegroup')
-  const isNetworkSecurityGroupModule =
-    normalizedModuleName.includes('networksecuritygroup') ||
-    normalizedTerraformPath.includes('networksecuritygroup')
-  const isNetworkSecurityRuleModule =
-    normalizedModuleName.includes('networksecurityrule') ||
-    normalizedTerraformPath.includes('networksecurityrule')
   const isPublicIpModule =
     normalizedModuleName.includes('publicip') ||
     normalizedTerraformPath.includes('publicip')
@@ -258,9 +252,6 @@ export default function ModulesPage() {
   const isBastionHostModule =
     normalizedModuleName.includes('bastionhost') ||
     normalizedTerraformPath.includes('bastionhost')
-  const isSubnetModule =
-    normalizedModuleName.includes('subnet') ||
-    normalizedTerraformPath.includes('subnet')
 
   const isImportSupportedModule = isResourceGroupModule || isStorageAccountModule || isKeyVaultModule
 
@@ -277,14 +268,11 @@ export default function ModulesPage() {
   const isImportSupportedModuleFull =
     isImportSupportedModule ||
     isVirtualNetworkModule ||
-    isNetworkSecurityGroupModule ||
-    isNetworkSecurityRuleModule ||
     isPublicIpModule ||
     isLocalNetworkGatewayModule ||
     isVirtualNetworkGatewayModule ||
     isVirtualNetworkPeeringModule ||
-    isBastionHostModule ||
-    isSubnetModule
+    isBastionHostModule
   const isImportOptionModule = isImportSupportedModuleFull && !isResourceGroupModule
 
   const selectedLocation = formValues['location'] ?? ''
@@ -310,15 +298,12 @@ export default function ModulesPage() {
     isStorageAccountModule ? 'Storage Account' :
       isKeyVaultModule ? 'Key Vault' :
         isVirtualNetworkModule ? 'Virtual Network' :
-          isNetworkSecurityGroupModule ? 'Network Security Group' :
-            isNetworkSecurityRuleModule ? 'Network Security Rule' :
-              isPublicIpModule ? 'Public IP' :
-                isLocalNetworkGatewayModule ? 'Local Network Gateway' :
-                  isVirtualNetworkGatewayModule ? 'Virtual Network Gateway' :
-                    isVirtualNetworkPeeringModule ? 'Virtual Network Peering' :
-                      isBastionHostModule ? 'Bastion Host' :
-                        isSubnetModule ? 'Subnet' :
-                          'Resource'
+          isPublicIpModule ? 'Public IP' :
+            isLocalNetworkGatewayModule ? 'Local Network Gateway' :
+              isVirtualNetworkGatewayModule ? 'Virtual Network Gateway' :
+                isVirtualNetworkPeeringModule ? 'Virtual Network Peering' :
+                  isBastionHostModule ? 'Bastion Host' :
+                    'Resource'
   const availableResourceGroupNames = useMemo(() => {
     const uniqueNames = new Set(
       managedResources

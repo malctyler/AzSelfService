@@ -210,12 +210,14 @@ When preparing a real Azure environment, use the PowerShell helpers in `scripts/
 
 ```powershell
 # Create the bootstrap RG and RBAC-enabled Key Vault
-.\scripts\bootstrap-keyvault.ps1 `
+.\scripts\bootstrap-platform-secrets-storage.ps1 `
   -CredentialClixmlPath 'C:\Users\malcolm.COTTAGES\CredentialStore\PROD-Automation.clixml' `
   -TenantId 'bf0465f4-f8c0-4ff4-978d-af5315afa795' `
   -SubscriptionId '5b337264-50ba-4056-bc9f-1a926a433c18' `
   -ResourceGroupName 'rg-azselfservice-bootstrap' `
   -KeyVaultName 'azselfservicebootstrapkv' `
+  -StorageAccountName 'azselfservicetfstate01' `
+  -SoftwareStorageAccountName 'azselfservicesoftware01' `
   -SecretName 'starting-secret'
 
 # Point the platform customer record at the client-secret Key Vault reference

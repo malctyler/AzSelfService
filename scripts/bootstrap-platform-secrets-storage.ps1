@@ -18,6 +18,7 @@ param(
     [string]$Location = 'uksouth',
     [string]$SecretName = 'starting-secret',
     [string]$SecretValue,
+    [switch]$CreateResourceGroupIfMissing,
     [switch]$SkipLogin
 )
 
@@ -103,27 +104,51 @@ if ([string]::IsNullOrWhiteSpace($SecretValue)) {
 
 Write-Step 'Signing in with service principal'
 if (-not $SkipLogin) {
-    az login --service-principal --username $ServicePrincipalAppId --password $ServicePrincipalSecret --tenant $TenantId --only-show-errors | Out-Null
+    az login --service-principal --username $ServicePrincipalAppId "--password=$ServicePrincipalSecret" --tenant $TenantId --only-show-errors | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Azure CLI login failed for the supplied service principal credentials.'
+    }
 }
 
 Write-Step "Selecting subscription $SubscriptionId"
 az account set --subscription $SubscriptionId --only-show-errors | Out-Null
 
-Write-Step "Creating resource group $ResourceGroupName in $Location"
-az group create `
-    --name $ResourceGroupName `
-    --location $Location `
-    --tags managed-by=azselfservice purpose=bootstrap `
-    --only-show-errors | Out-Null
+Write-Step "Checking for resource group $ResourceGroupName"
+$resourceGroupExists = az group exists --name $ResourceGroupName -o tsv
 
-Write-Step "Creating Key Vault $KeyVaultName with RBAC authorization"
-az keyvault create `
-    --name $KeyVaultName `
+if ($resourceGroupExists -eq 'true') {
+    Write-Step "Using existing resource group $ResourceGroupName"
+}
+elseif ($CreateResourceGroupIfMissing) {
+    Write-Step "Creating resource group $ResourceGroupName in $Location"
+    az group create `
+        --name $ResourceGroupName `
+        --location $Location `
+        --tags managed-by=azselfservice purpose=bootstrap `
+        --only-show-errors | Out-Null
+}
+else {
+    throw "Resource group '$ResourceGroupName' does not exist. Re-run with -CreateResourceGroupIfMissing to create it, or supply an existing resource group."
+}
+
+$keyVaultExists = az keyvault list `
     --resource-group $ResourceGroupName `
-    --location $Location `
-    --enable-rbac-authorization true `
-    --sku standard `
-    --only-show-errors | Out-Null
+    --query "[?name=='$KeyVaultName'] | length(@)" `
+    -o tsv
+
+if ($keyVaultExists -eq '0') {
+    Write-Step "Creating Key Vault $KeyVaultName with RBAC authorization"
+    az keyvault create `
+        --name $KeyVaultName `
+        --resource-group $ResourceGroupName `
+        --location $Location `
+        --enable-rbac-authorization true `
+        --sku standard `
+        --only-show-errors | Out-Null
+}
+else {
+    Write-Step "Using existing Key Vault $KeyVaultName"
+}
 
 $vaultId = az keyvault show `
     --name $KeyVaultName `
@@ -131,20 +156,47 @@ $vaultId = az keyvault show `
     --query id `
     -o tsv
 
+$vaultRbacEnabled = az keyvault show `
+    --name $KeyVaultName `
+    --resource-group $ResourceGroupName `
+    --query properties.enableRbacAuthorization `
+    -o tsv
+
+if ($vaultRbacEnabled -ne 'true') {
+    throw "Key Vault '$KeyVaultName' exists but does not have RBAC authorization enabled. Enable RBAC on the vault or use a different vault."
+}
+
 Write-Step 'Assigning Key Vault Administrator role to the service principal'
 Invoke-AzRoleAssignmentWithRetry -PrincipalAppId $ServicePrincipalAppId -Scope $vaultId
 
-Write-Step "Creating storage account $StorageAccountName"
-az storage account create `
-    --name $StorageAccountName `
+$tfStateStorageExists = az storage account list `
     --resource-group $ResourceGroupName `
-    --location $Location `
-    --sku Standard_LRS `
-    --kind StorageV2 `
-    --allow-blob-public-access false `
-    --min-tls-version TLS1_2 `
-    --tags managed-by=azselfservice purpose=tfstate `
-    --only-show-errors | Out-Null
+    --query "[?name=='$StorageAccountName'] | length(@)" `
+    -o tsv
+
+if ($tfStateStorageExists -eq '0') {
+    Write-Step "Creating storage account $StorageAccountName"
+    az storage account create `
+        --name $StorageAccountName `
+        --resource-group $ResourceGroupName `
+        --location $Location `
+        --sku Standard_LRS `
+        --kind StorageV2 `
+        --allow-blob-public-access false `
+        --min-tls-version TLS1_2 `
+        --tags managed-by=azselfservice purpose=tfstate `
+        --only-show-errors | Out-Null
+}
+else {
+    Write-Step "Retrofitting storage account $StorageAccountName"
+    az storage account update `
+        --name $StorageAccountName `
+        --resource-group $ResourceGroupName `
+        --allow-blob-public-access false `
+        --min-tls-version TLS1_2 `
+        --tags managed-by=azselfservice purpose=tfstate `
+        --only-show-errors | Out-Null
+}
 
 $storageId = az storage account show `
     --name $StorageAccountName `
@@ -253,9 +305,12 @@ for ($attempt = 1; $attempt -le 10; $attempt++) {
         az keyvault secret set `
             --vault-name $KeyVaultName `
             --name $SecretName `
-            --value $SecretValue `
+            "--value=$SecretValue" `
             --content-type "appid=$ServicePrincipalAppId" `
             --only-show-errors | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set secret '$SecretName' in key vault '$KeyVaultName'."
+        }
         Write-Host "Secret uploaded successfully." -ForegroundColor Green
         break
     }
