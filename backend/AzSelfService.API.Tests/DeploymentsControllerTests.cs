@@ -54,7 +54,7 @@ public sealed class DeploymentsControllerTests
             new ServiceCollection().BuildServiceProvider(),
             NullLogger<CustomerCredentialPreflightService>.Instance);
 
-        var controller = new DeploymentsController(db, preflightService)
+        var controller = new DeploymentsController(db, preflightService, new FakeSoftwarePackageBlobStorageService())
         {
             ControllerContext = new ControllerContext
             {
@@ -288,9 +288,30 @@ public sealed class DeploymentsControllerTests
         await db.SaveChangesAsync();
 
         var deployment = await db.Deployments.Include(x => x.Input).SingleAsync(x => x.Id == deploymentId);
+        var module = await db.Modules.SingleAsync(x => x.Id == moduleId);
+        module.Name = "windows-server-marketplace";
+        module.TerraformPath = "terraform-modules/windows-server-marketplace";
+
+        db.SoftwarePackages.Add(new SoftwarePackageEntity
+        {
+            Id = Guid.NewGuid(),
+            Scope = "platform",
+            PackageId = "winscp.winscp",
+            Version = "6.5.1",
+            DisplayName = "WinSCP",
+            Publisher = "WinSCP",
+            Os = "windows",
+            Architecture = "x64",
+            InstallerType = "zip",
+            BlobPath = "catalog/platform/winscp.winscp/6.5.1/winscp.zip",
+            ZipSha256 = "abc123",
+            IsPublished = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         deployment.Status = "SUCCEEDED";
         deployment.TerraformStatePath = "tfstate/customers/customer/module/state.tfstate";
-        deployment.Input!.Inputs = "{\"name\":\"demo-rg\"}";
+        deployment.Input!.Inputs = "{\"name\":\"demo-rg\",\"software_package_ids\":[\"winscp.winscp\"]}";
         await db.SaveChangesAsync();
 
         var controller = CreateController(db, customerId, userId);
@@ -317,6 +338,14 @@ public sealed class DeploymentsControllerTests
         var redeployInput = await db.DeploymentInputs.SingleAsync(x => x.DeploymentId == payload.RedeployDeploymentId);
         using var redeployDoc = JsonDocument.Parse(redeployInput.Inputs);
         Assert.Equal("demo-rg", redeployDoc.RootElement.GetProperty("name").GetString());
+        Assert.Equal("winscp.winscp", redeployDoc.RootElement.GetProperty("software_package_ids")[0].GetString());
+        Assert.Equal("winscp.winscp", redeployDoc.RootElement.GetProperty("software_package_catalog_packages")[0].GetProperty("package_id").GetString());
+        Assert.Equal("azselfservicesoftware01", redeployDoc.RootElement.GetProperty("software_storage_account_name").GetString());
+        Assert.Equal("packages", redeployDoc.RootElement.GetProperty("software_storage_container_name").GetString());
+        Assert.True(redeployDoc.RootElement.GetProperty("software_package_catalog_packages")[0].TryGetProperty("download_url", out var downloadUrl));
+        Assert.False(string.IsNullOrWhiteSpace(downloadUrl.GetString()));
+        Assert.True(redeployDoc.RootElement.TryGetProperty("post_install_script_uri", out var scriptUri));
+        Assert.False(string.IsNullOrWhiteSpace(scriptUri.GetString()));
         Assert.False(redeployDoc.RootElement.TryGetProperty("__operation", out _));
     }
 
@@ -539,7 +568,7 @@ public sealed class DeploymentsControllerTests
             new ServiceCollection().BuildServiceProvider(),
             NullLogger<CustomerCredentialPreflightService>.Instance);
 
-        return new DeploymentsController(db, preflightService)
+        return new DeploymentsController(db, preflightService, new FakeSoftwarePackageBlobStorageService())
         {
             ControllerContext = new ControllerContext
             {
@@ -662,5 +691,23 @@ public sealed class DeploymentsControllerTests
             .Options;
 
         return new AzSelfServiceDbContext(options);
+    }
+
+    private sealed class FakeSoftwarePackageBlobStorageService : ISoftwarePackageBlobStorageService
+    {
+        public Task UploadAsync(string storageAccountName, string containerName, string blobPath, Stream content, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteIfExistsAsync(string storageAccountName, string containerName, string blobPath, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<Uri> CreateReadUriAsync(string storageAccountName, string containerName, string blobPath, TimeSpan lifetime, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new Uri($"https://example.invalid/{containerName}/{blobPath}?sig=test"));
+        }
     }
 }

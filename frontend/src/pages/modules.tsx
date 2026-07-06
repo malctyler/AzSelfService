@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import {
   createDeployment,
   deprecateModule,
+  getSoftwarePackagesForDeployment,
   getManagedResources,
   getModules,
   publishModule,
@@ -16,7 +17,8 @@ import {
   type ArmLookupResult,
   type ImportResourceOption,
   type ManagedResourceSummary,
-  type ModuleSummary
+  type ModuleSummary,
+  type SoftwarePackageCatalogItem
 } from '../lib/api'
 import {
   getVNetDeployments,
@@ -149,6 +151,128 @@ function parseMultiSelectInput(value: string): string[] {
   )
 }
 
+function parseDnsServersInput(value: string): string[] {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return []
+  }
+
+  if (trimmed.startsWith('[')) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      throw new Error('DC / DNS Server IPs must be a valid JSON array or a comma-separated list.')
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new Error('DC / DNS Server IPs must be a valid JSON array or a comma-separated list.')
+    }
+
+    return Array.from(
+      new Set(
+        parsed
+          .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry) => entry.length > 0)
+      )
+    )
+  }
+
+  return Array.from(
+    new Set(
+      trimmed
+        .split(/[\n,;]+/)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    )
+  )
+}
+
+function parseStringArrayInput(value: string, fieldLabel: string): string[] {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return []
+  }
+
+  if (trimmed.startsWith('[')) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      throw new Error(`${fieldLabel} must be a valid JSON array or a comma-separated list.`)
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${fieldLabel} must be a valid JSON array or a comma-separated list.`)
+    }
+
+    return Array.from(
+      new Set(
+        parsed
+          .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry) => entry.length > 0)
+      )
+    )
+  }
+
+  return Array.from(
+    new Set(
+      trimmed
+        .split(/[\n,;]+/)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    )
+  )
+}
+
+function isValidIpv4Address(value: string): boolean {
+  const octets = value.split('.')
+  if (octets.length !== 4) {
+    return false
+  }
+
+  return octets.every((octet) => {
+    if (!/^\d+$/.test(octet)) {
+      return false
+    }
+
+    const numeric = Number(octet)
+    return numeric >= 0 && numeric <= 255
+  })
+}
+
+function validateDnsServerIps(ips: string[]): string | null {
+  if (ips.length === 0) {
+    return 'At least one DC IP address is required in "DC / DNS Server IPs" when a domain name is set.'
+  }
+
+  const invalid = ips.filter((ip) => !isValidIpv4Address(ip))
+  if (invalid.length > 0) {
+    return `Invalid DNS server IP address(es): ${invalid.join(', ')}. Use IPv4 addresses such as 10.0.0.4.`
+  }
+
+  return null
+}
+
+function validateWindowsAdminPassword(value: string): string | null {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return null
+  }
+
+  const hasLower = /[a-z]/.test(trimmed)
+  const hasUpper = /[A-Z]/.test(trimmed)
+  const hasDigit = /\d/.test(trimmed)
+  const hasSpecialExcludingUnderscore = /[^A-Za-z0-9_]/.test(trimmed)
+  const fulfilledConditions = [hasLower, hasUpper, hasDigit, hasSpecialExcludingUnderscore].filter(Boolean).length
+
+  if (fulfilledConditions < 3) {
+    return 'admin_password must satisfy at least 3 of 4 conditions: lowercase letter, uppercase letter, digit, and special character other than underscore (_).'
+  }
+
+  return null
+}
+
 export default function ModulesPage() {
   const router = useRouter()
   const hydrate = useAuthStore((state) => state.hydrate)
@@ -180,6 +304,8 @@ export default function ModulesPage() {
   const [isLoadingImportOptions, setIsLoadingImportOptions] = useState(false)
   const [importOptionsError, setImportOptionsError] = useState<string | null>(null)
   const [isDomainJoinExpanded, setIsDomainJoinExpanded] = useState(false)
+  const [softwarePackages, setSoftwarePackages] = useState<SoftwarePackageCatalogItem[]>([])
+  const [softwarePackagesError, setSoftwarePackagesError] = useState<string | null>(null)
   useEffect(() => {
     hydrate()
   }, [hydrate])
@@ -190,10 +316,12 @@ export default function ModulesPage() {
       return
     }
 
-    Promise.all([getModules(), getManagedResources()])
-      .then(([moduleData, managedResourceData]) => {
+    Promise.all([getModules(), getManagedResources(), getSoftwarePackagesForDeployment('platform')])
+      .then(([moduleData, managedResourceData, catalogPackages]) => {
         setModules(moduleData)
         setManagedResources(managedResourceData)
+        setSoftwarePackages(catalogPackages)
+        setSoftwarePackagesError(null)
 
         // Load VNet deployment details (for Windows Server subnet picker)
         getVNetDeployments().then(setVnetDeployments).catch(() => setVnetDeployments([]))
@@ -215,6 +343,8 @@ export default function ModulesPage() {
       .catch(() => {
         setModules([])
         setManagedResources([])
+        setSoftwarePackages([])
+        setSoftwarePackagesError('Failed to load software catalog packages.')
       })
   }, [token, router])
 
@@ -294,6 +424,23 @@ export default function ModulesPage() {
   const requiredFields = new Set(selectedModule?.schema?.required || [])
   const hasResourceGroupField = Object.prototype.hasOwnProperty.call(properties, 'resource_group_name')
   const hasTenantIdField = Object.prototype.hasOwnProperty.call(properties, 'tenant_id')
+  const domainNameForLiveValidation = (formValues['domain_name'] ?? '').trim()
+  const dnsRawForLiveValidation = formValues['dns_servers'] ?? ''
+  const dnsLiveValidationError = useMemo(() => {
+    if (!isWindowsServerModule || !domainNameForLiveValidation) {
+      return null
+    }
+
+    try {
+      const dnsServers = parseDnsServersInput(dnsRawForLiveValidation)
+      return validateDnsServerIps(dnsServers)
+    } catch (error) {
+      return error instanceof Error
+        ? error.message
+        : 'DC / DNS Server IPs must be a valid JSON array or a comma-separated list.'
+    }
+  }, [isWindowsServerModule, domainNameForLiveValidation, dnsRawForLiveValidation])
+
   const importResourceLabel =
     isStorageAccountModule ? 'Storage Account' :
       isKeyVaultModule ? 'Key Vault' :
@@ -318,6 +465,18 @@ export default function ModulesPage() {
 
     return Array.from(uniqueNames).sort((a, b) => a.localeCompare(b))
   }, [managedResources])
+
+  const latestSoftwarePackages = useMemo(() => {
+    const latestByPackageId = new Map<string, SoftwarePackageCatalogItem>()
+    for (const item of softwarePackages) {
+      const existing = latestByPackageId.get(item.packageId)
+      if (!existing) {
+        latestByPackageId.set(item.packageId, item)
+      }
+    }
+
+    return Array.from(latestByPackageId.values()).sort((a, b) => a.packageId.localeCompare(b.packageId))
+  }, [softwarePackages])
 
   const checkStorageNameAvailability = async () => {
     const storageName = formValues.name?.trim()
@@ -502,9 +661,24 @@ export default function ModulesPage() {
           continue
         }
 
+        // Domain-join fields for Windows Server are handled in the custom panel below.
+        if (isWindowsServerModule && DOMAIN_JOIN_FIELDS.has(fieldName)) {
+          continue
+        }
+
         const rawValue = formValues[fieldName] ?? ''
 
         if (fieldSchema.type === 'array') {
+          if (isWindowsServerModule && fieldName === 'software_package_ids') {
+            payload[fieldName] = parseStringArrayInput(rawValue, 'software_package_ids')
+            continue
+          }
+
+          if (isWindowsServerModule && fieldName === 'chocolatey_packages') {
+            payload[fieldName] = parseStringArrayInput(rawValue, 'chocolatey_packages')
+            continue
+          }
+
           const hasEnumOptions = (fieldSchema.enum?.length ?? 0) > 0
           if (hasEnumOptions) {
             // multi-select rendered field — values are comma-joined strings
@@ -532,6 +706,13 @@ export default function ModulesPage() {
         const validationError = validateScalarInput(fieldName, fieldSchema, rawValue, requiredFields.has(fieldName))
         if (validationError) {
           throw new Error(validationError)
+        }
+
+        if (isWindowsServerModule && fieldName === 'admin_password') {
+          const adminPasswordValidationError = validateWindowsAdminPassword(rawValue)
+          if (adminPasswordValidationError) {
+            throw new Error(adminPasswordValidationError)
+          }
         }
 
         if (fieldSchema.type === 'object') {
@@ -578,12 +759,13 @@ export default function ModulesPage() {
           const joinUsername = (formValues['domain_join_username'] ?? '').trim()
           const joinPassword = (formValues['domain_join_password'] ?? '').trim()
           const dnsRaw = (formValues['dns_servers'] ?? '').trim()
-          const dnsServers = dnsRaw ? dnsRaw.split(',').map(s => s.trim()).filter(s => s.length > 0) : []
+          const dnsServers = parseDnsServersInput(dnsRaw)
           if (!joinUsername || !joinPassword) {
             throw new Error('Domain join account username and password are required when a domain name is set.')
           }
-          if (dnsServers.length === 0) {
-            throw new Error('At least one DC IP address is required in "DC / DNS Server IPs" when a domain name is set.')
+          const dnsValidationError = validateDnsServerIps(dnsServers)
+          if (dnsValidationError) {
+            throw new Error(dnsValidationError)
           }
           payload['domain_join_username'] = joinUsername
           payload['domain_join_password'] = formValues['domain_join_password'] ?? ''
@@ -797,10 +979,18 @@ export default function ModulesPage() {
               const options = fieldSchema.enum || []
               const isObjectField = fieldSchema.type === 'object'
               const isArrayField = fieldSchema.type === 'array'
+              const adminPasswordLiveValidationError =
+                isWindowsServerModule && fieldName === 'admin_password'
+                  ? validateWindowsAdminPassword(formValues[fieldName] || '')
+                  : null
               const selectedArrayValues = isArrayField
                 ? parseMultiSelectInput(formValues[fieldName] || '')
                 : []
-              const helpText = fieldSchema.validationMessage || fieldSchema.description
+              const helpText = (isWindowsServerModule && fieldName === 'chocolatey_packages')
+                ? 'Enter package IDs as comma-separated values (for example: adobereader,7zip,googlechrome) or as a JSON array.'
+                : (isWindowsServerModule && fieldName === 'software_package_ids')
+                  ? 'Select package IDs from the software catalog. Each package ID maps to a Chocolatey package using the final segment after the dot.'
+                  : (fieldSchema.validationMessage || fieldSchema.description)
 
               return (
                 <div key={fieldName} style={{ marginBottom: 12 }}>
@@ -848,6 +1038,34 @@ export default function ModulesPage() {
                       placeholder='{"owner":"platform","costCenter":"1234"}'
                       required={isRequired}
                     />
+                  ) : isWindowsServerModule && fieldName === 'software_package_ids' ? (
+                    <>
+                      <select
+                        multiple
+                        value={selectedArrayValues}
+                        onChange={(e) => {
+                          const values = Array.from(e.target.selectedOptions).map((option) => option.value)
+                          setFormValues((current) => ({ ...current, [fieldName]: values.join(',') }))
+                        }}
+                        style={{ width: '100%', padding: 8, minHeight: 110 }}
+                        required={isRequired}
+                      >
+                        {latestSoftwarePackages.map((item) => (
+                          <option key={item.packageId} value={item.packageId}>
+                            {item.displayName} ({item.packageId}) v{item.version}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                        Hold Ctrl/Cmd to select multiple packages from the catalog.
+                      </div>
+                      {softwarePackagesError && (
+                        <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>{softwarePackagesError}</div>
+                      )}
+                      {latestSoftwarePackages.length === 0 && !softwarePackagesError && (
+                        <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>No published software packages are currently available.</div>
+                      )}
+                    </>
                   ) : isArrayField && options.length > 0 ? (
                     <>
                       <select
@@ -875,7 +1093,7 @@ export default function ModulesPage() {
                       value={formValues[fieldName] || ''}
                       onChange={(e) => setFormValues((current) => ({ ...current, [fieldName]: e.target.value }))}
                       style={{ width: '100%', padding: 8, minHeight: 100, fontFamily: 'monospace', fontSize: 12 }}
-                      placeholder={`[]`}
+                      placeholder={isWindowsServerModule && fieldName === 'chocolatey_packages' ? 'adobereader,7zip,googlechrome' : '[]'}
                       required={isRequired}
                     />
                   ) : options.length > 0 ? (
@@ -966,6 +1184,11 @@ export default function ModulesPage() {
                   {helpText && (
                     <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
                       {helpText}
+                    </div>
+                  )}
+                  {adminPasswordLiveValidationError && (
+                    <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>
+                      {adminPasswordLiveValidationError}
                     </div>
                   )}
                   {(isStorageAccountModule && fieldName === 'name') && (
@@ -1125,7 +1348,9 @@ export default function ModulesPage() {
                       const fieldSchema = properties[fieldName]
                       const domainName = formValues['domain_name']?.trim() ?? ''
                       if (fieldName !== 'domain_name' && !domainName) return null
-                      const helpText = fieldSchema.validationMessage || fieldSchema.description
+                      const helpText = fieldName === 'dns_servers'
+                        ? 'Enter one or more DC IP addresses separated by commas (for example: 10.0.0.4, 10.0.0.5).'
+                        : (fieldSchema.validationMessage || fieldSchema.description)
                       return (
                         <div key={fieldName} style={{ marginBottom: 12 }}>
                           <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>
@@ -1152,6 +1377,9 @@ export default function ModulesPage() {
                           />
                           {helpText && (
                             <div style={{ color: '#6b7280', fontSize: 12, marginTop: 4 }}>{helpText}</div>
+                          )}
+                          {fieldName === 'dns_servers' && dnsLiveValidationError && (
+                            <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>{dnsLiveValidationError}</div>
                           )}
                         </div>
                       )

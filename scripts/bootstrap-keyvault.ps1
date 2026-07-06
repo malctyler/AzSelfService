@@ -206,6 +206,7 @@ else {
         --resource-group $ResourceGroupName `
         --allow-blob-public-access false `
         --min-tls-version TLS1_2 `
+        0
         --tags managed-by=azselfservice purpose=software `
         --only-show-errors | Out-Null
 }

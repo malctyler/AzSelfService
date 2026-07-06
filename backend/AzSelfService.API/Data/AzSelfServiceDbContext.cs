@@ -14,6 +14,7 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
     public DbSet<DeploymentOutputEntity> DeploymentOutputs => Set<DeploymentOutputEntity>();
     public DbSet<DeploymentLogEntity> DeploymentLogs => Set<DeploymentLogEntity>();
     public DbSet<StorageAccount> StorageAccounts => Set<StorageAccount>();
+    public DbSet<SoftwarePackageEntity> SoftwarePackages => Set<SoftwarePackageEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -168,6 +169,36 @@ public sealed class AzSelfServiceDbContext(DbContextOptions<AzSelfServiceDbConte
             entity.Property(x => x.Region).HasColumnName("region").HasMaxLength(50);
             entity.Property(x => x.ResourceGroup).HasColumnName("resource_group").HasMaxLength(255);
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<SoftwarePackageEntity>(entity =>
+        {
+            entity.ToTable("software_packages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.Scope).HasColumnName("scope").HasMaxLength(32);
+            entity.Property(x => x.CustomerId).HasColumnName("customer_id");
+            entity.Property(x => x.PackageId).HasColumnName("package_id").HasMaxLength(255);
+            entity.Property(x => x.Version).HasColumnName("version").HasMaxLength(50);
+            entity.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(255);
+            entity.Property(x => x.Publisher).HasColumnName("publisher").HasMaxLength(255);
+            entity.Property(x => x.Os).HasColumnName("os").HasMaxLength(64);
+            entity.Property(x => x.Architecture).HasColumnName("architecture").HasMaxLength(64);
+            entity.Property(x => x.InstallerType).HasColumnName("installer_type").HasMaxLength(64);
+            entity.Property(x => x.BlobPath).HasColumnName("blob_path").HasMaxLength(1024);
+            entity.Property(x => x.ZipSha256).HasColumnName("zip_sha256").HasMaxLength(64);
+            entity.Property(x => x.ManifestJson).HasColumnName("manifest_json").HasColumnType("jsonb");
+            entity.Property(x => x.IsPublished).HasColumnName("is_published");
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            entity.HasIndex(x => new { x.Scope, x.CustomerId, x.PackageId, x.Version })
+                .IsUnique();
+
+            entity.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

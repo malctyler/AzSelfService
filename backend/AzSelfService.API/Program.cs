@@ -22,6 +22,8 @@ builder.Services.AddScoped<ICustomerCredentialProvisioningService, CustomerCrede
 builder.Services.AddScoped<KeyVaultReadinessService>();
 builder.Services.AddScoped<StorageAccountNameAvailabilityService>();
 builder.Services.AddScoped<KeyVaultNameAvailabilityService>();
+builder.Services.AddScoped<SoftwarePackageValidationService>();
+builder.Services.AddScoped<ISoftwarePackageBlobStorageService, SoftwarePackageBlobStorageService>();
 builder.Services.AddScoped<ResourceGroupLookupService>();
 builder.Services.AddScoped<ImportResourceDiscoveryService>();
 builder.Services.AddScoped<AllowedRegionCatalogService>();

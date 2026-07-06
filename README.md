@@ -12,7 +12,7 @@ AzSelfService abstracts Terraform complexity behind a clean web UI:
 
 1. **Customer** submits deployment request via form (e.g., "Create Resource Group in East US")
 2. **Platform** validates inputs, queues job, executes Terraform asynchronously
-3. **Worker** runs `terraform apply`, streams logs in real-time
+3. **Worker** runs `terraform apply`, persists logs, and the UI polls for updated deployment state
 4. **Customer** sees deployment status, outputs, and complete audit trail
 
 **Core principle:** Terraform is the source of truth; the platform is the orchestration layer.
@@ -155,7 +155,7 @@ See [implementation plan](docs/PLAN.md) for detailed phase breakdown.
 - [x] Resource Group Terraform module (deployable MVP)
 - [x] Deployment request form with validation
 - [x] Async job queue with worker execution
-- [x] Real-time log streaming
+- [x] Deployment log persistence and polling-based status updates
 - [x] Terraform output display
 - [x] Full audit trail
 - [x] Complete API documentation (OpenAPI/Swagger)

@@ -136,7 +136,10 @@ export default function AdminModulesPage() {
     <main style={{ maxWidth: 1100, margin: '2rem auto', padding: '0 1rem' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Admin Modules</h1>
-        <Link href="/dashboard">Back to Dashboard</Link>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Link href="/admin/software-packages">Software Packages</Link>
+          <Link href="/dashboard">Back to Dashboard</Link>
+        </div>
       </header>
 
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16, marginBottom: 16 }}>

@@ -4,7 +4,7 @@
 
 **AzSelfService** is a controlled self-service Azure provisioning platform that enables customers to deploy approved infrastructure modules without requiring direct Terraform expertise.
 
-**What:** A web-based platform (React frontend, .NET backend) that collects infrastructure requests via forms, validates inputs, queues deployment jobs, executes Terraform modules asynchronously, and provides real-time status tracking and audit trails.
+**What:** A web-based platform (React frontend, .NET backend) that collects infrastructure requests via forms, validates inputs, queues deployment jobs, executes Terraform modules asynchronously, and provides status tracking and audit trails backed by persisted deployment logs.
 
 **Why:** Accelerate infrastructure delivery, reduce manual handoffs, enforce governance through approved modules, maintain full audit compliance, and empower customers with self-service capabilities while keeping platform engineers in control.
 
@@ -63,7 +63,7 @@ Flow:
 2. Backend creates deployment job
 3. Worker process polls job queue
 4. Worker executes Terraform asynchronously
-5. Logs, state, results persisted to database
+5. Logs, state, results persisted to database and surfaced to the UI through polling
 
 **Benefits:**
 - Retryable: failed deployments can be retried without re-submitting the form

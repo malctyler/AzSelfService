@@ -20,11 +20,15 @@ namespace AzSelfService.API.Controllers;
 public sealed class DeploymentsController(
     AzSelfServiceDbContext dbContext,
     CustomerCredentialPreflightService preflightService,
+    ISoftwarePackageBlobStorageService? softwarePackageBlobStorageService = null,
     StorageAccountNameAvailabilityService? storageAccountNameAvailabilityService = null,
     AllowedRegionCatalogService? allowedRegionCatalogService = null,
     ResourceGroupLookupService? resourceGroupLookupService = null,
     ImportResourceDiscoveryService? importResourceDiscoveryService = null) : ControllerBase
 {
+    private const string DefaultSoftwareStorageAccountName = "azselfservicesoftware01";
+    private const string DefaultSoftwareStorageContainerName = "packages";
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ManagedResourceResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ManagedResourceResponse>>> GetManagedResources(CancellationToken cancellationToken)
@@ -94,6 +98,14 @@ public sealed class DeploymentsController(
         }
 
         var effectiveInputs = EnsureModuleDefaultInputs(module.Name, request.Inputs, customer);
+        try
+        {
+            effectiveInputs = await InjectSoftwarePackageCatalogPackagesAsync(module.Name, effectiveInputs, customerId, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
 
         var schemaJson = module.Schema;
         if (allowedRegionCatalogService is not null)
@@ -859,7 +871,8 @@ public sealed class DeploymentsController(
             });
     }
 
-    private static bool IsSupportedForImport(string moduleName)    {
+    private static bool IsSupportedForImport(string moduleName)
+    {
         var normalized = moduleName.ToLowerInvariant().Trim();
         return normalized is
             "resource-group"
@@ -899,10 +912,12 @@ public sealed class DeploymentsController(
             // CustomScriptExtension also cannot be updated in-place once it has run.
             var hasPackages = inputs.TryGetProperty("chocolatey_packages", out var pkgsEl)
                 && pkgsEl.ValueKind == JsonValueKind.Array && pkgsEl.GetArrayLength() > 0;
+            var hasCatalogPackages = inputs.TryGetProperty("software_package_ids", out var catalogIdsEl)
+                && catalogIdsEl.ValueKind == JsonValueKind.Array && catalogIdsEl.GetArrayLength() > 0;
             var hasScriptUri = inputs.TryGetProperty("post_install_script_uri", out var uriEl)
                 && uriEl.ValueKind == JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(uriEl.GetString());
-            if (hasPackages || hasScriptUri)
+            if (hasPackages || hasCatalogPackages || hasScriptUri)
             {
                 result.Add("azurerm_virtual_machine_extension.post_install[0]");
             }
@@ -968,7 +983,9 @@ public sealed class DeploymentsController(
             ModuleName = deployment.Module.Name,
             ModuleVersion = deployment.Module.Version,
             Status = deployment.Status,
-            ErrorMessage = deployment.ErrorMessage,
+            ErrorMessage = string.Equals(deployment.Status, "RUNNING", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : deployment.ErrorMessage,
             RetryCount = deployment.RetryCount,
             TerraformStatePath = deployment.TerraformStatePath,
             CreatedAtUtc = deployment.CreatedAt,
@@ -1047,7 +1064,7 @@ public sealed class DeploymentsController(
             return BadRequest(new { message = "Customer is not active or does not exist." });
         }
 
-        if (string.IsNullOrWhiteSpace(customer.TenantId) 
+        if (string.IsNullOrWhiteSpace(customer.TenantId)
             || string.IsNullOrWhiteSpace(customer.SubscriptionId))
         {
             return BadRequest(new
@@ -1057,7 +1074,7 @@ public sealed class DeploymentsController(
         }
 
         var result = await storageAccountNameAvailabilityService.CheckAsync(customer, request.Name, cancellationToken);
-        
+
         return Ok(new StorageNameAvailabilityCheckResponse
         {
             IsAvailable = result.IsAvailable,
@@ -1109,6 +1126,274 @@ public sealed class DeploymentsController(
         return JsonSerializer.SerializeToElement(merged);
     }
 
+    private async Task<JsonElement> InjectSoftwarePackageCatalogPackagesAsync(
+        string moduleName,
+        JsonElement inputs,
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsWindowsServerModuleName(moduleName) || inputs.ValueKind != JsonValueKind.Object)
+        {
+            return inputs;
+        }
+
+        if (!inputs.TryGetProperty("software_package_ids", out var selectedIdsElement)
+            || selectedIdsElement.ValueKind != JsonValueKind.Array
+            || selectedIdsElement.GetArrayLength() == 0)
+        {
+            return inputs;
+        }
+
+        var selectedIds = selectedIdsElement.EnumerateArray()
+            .Select(x => x.ValueKind == JsonValueKind.String ? x.GetString()?.Trim() : null)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (selectedIds.Count == 0)
+        {
+            return inputs;
+        }
+
+        var packages = await dbContext.SoftwarePackages
+            .AsNoTracking()
+            .Where(x => x.IsPublished)
+            .Where(x => selectedIds.Contains(x.PackageId))
+            .Where(x => x.Scope == "platform" || (x.Scope == "customer" && x.CustomerId == customerId))
+            .ToListAsync(cancellationToken);
+
+        var resolvedPackages = new List<object>();
+        var missingPackageIds = new List<string>();
+
+        foreach (var packageId in selectedIds)
+        {
+            var package = packages
+                .Where(x => string.Equals(x.PackageId, packageId, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.Version, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(x => x.CreatedAt)
+                .FirstOrDefault();
+
+            if (package is null)
+            {
+                missingPackageIds.Add(packageId);
+                continue;
+            }
+
+            resolvedPackages.Add(new
+            {
+                package_id = package.PackageId,
+                display_name = package.DisplayName,
+                version = package.Version,
+                blob_path = package.BlobPath,
+                zip_sha256 = package.ZipSha256,
+                download_url = softwarePackageBlobStorageService is null
+                    ? null
+                    : await softwarePackageBlobStorageService.CreateReadUriAsync(
+                        DefaultSoftwareStorageAccountName,
+                        DefaultSoftwareStorageContainerName,
+                        package.BlobPath,
+                        TimeSpan.FromHours(2),
+                        cancellationToken)
+            });
+        }
+
+        if (missingPackageIds.Count > 0)
+        {
+            throw new InvalidOperationException($"Catalog package(s) not found or not published: {string.Join(", ", missingPackageIds)}");
+        }
+
+        var merged = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in inputs.EnumerateObject())
+        {
+            merged[property.Name] = property.Value.Clone();
+        }
+
+        merged["software_package_catalog_packages"] = JsonSerializer.SerializeToElement(resolvedPackages);
+
+        // Preserve explicit values but backfill empty/missing values so Terraform
+        // variable defaults are not accidentally overridden to blank strings.
+        if (!merged.TryGetValue("software_storage_account_name", out var storageAccountElement)
+            || IsNullOrWhitespaceString(storageAccountElement))
+        {
+            merged["software_storage_account_name"] = JsonSerializer.SerializeToElement(DefaultSoftwareStorageAccountName);
+        }
+
+        if (!merged.TryGetValue("software_storage_container_name", out var storageContainerElement)
+            || IsNullOrWhitespaceString(storageContainerElement))
+        {
+            merged["software_storage_container_name"] = JsonSerializer.SerializeToElement(DefaultSoftwareStorageContainerName);
+        }
+
+        var catalogInjected = JsonSerializer.SerializeToElement(merged);
+        return await InjectWindowsMarketplacePostInstallScriptAsync(catalogInjected, cancellationToken);
+    }
+
+    private async Task<JsonElement> InjectWindowsMarketplacePostInstallScriptAsync(
+        JsonElement inputs,
+        CancellationToken cancellationToken)
+    {
+        if (!IsWindowsServerModuleName("windows-server-marketplace") || inputs.ValueKind != JsonValueKind.Object)
+        {
+            return inputs;
+        }
+
+        if (inputs.TryGetProperty("post_install_script_uri", out var scriptUriElement)
+            && scriptUriElement.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(scriptUriElement.GetString()))
+        {
+            return inputs;
+        }
+
+        var hasChocolateyPackages = inputs.TryGetProperty("chocolatey_packages", out var chocolateyPackagesElement)
+            && chocolateyPackagesElement.ValueKind == JsonValueKind.Array
+            && chocolateyPackagesElement.GetArrayLength() > 0;
+
+        var hasCatalogPackages = inputs.TryGetProperty("software_package_catalog_packages", out var catalogPackagesElement)
+            && catalogPackagesElement.ValueKind == JsonValueKind.Array
+            && catalogPackagesElement.GetArrayLength() > 0;
+
+        if (!hasChocolateyPackages && !hasCatalogPackages)
+        {
+            return inputs;
+        }
+
+        if (softwarePackageBlobStorageService is null)
+        {
+            return inputs;
+        }
+
+        var scriptContent = BuildWindowsMarketplacePostInstallScript(inputs);
+        await using var scriptStream = new MemoryStream(Encoding.UTF8.GetBytes(scriptContent));
+        var scriptBlobPath = $"generated-scripts/windows-server-marketplace/{Guid.NewGuid():N}.ps1";
+
+        await softwarePackageBlobStorageService.UploadAsync(
+            DefaultSoftwareStorageAccountName,
+            DefaultSoftwareStorageContainerName,
+            scriptBlobPath,
+            scriptStream,
+            cancellationToken);
+
+        var readUri = await softwarePackageBlobStorageService.CreateReadUriAsync(
+            DefaultSoftwareStorageAccountName,
+            DefaultSoftwareStorageContainerName,
+            scriptBlobPath,
+            TimeSpan.FromHours(2),
+            cancellationToken);
+
+        var merged = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in inputs.EnumerateObject())
+        {
+            merged[property.Name] = property.Value.Clone();
+        }
+
+        merged["post_install_script_uri"] = JsonSerializer.SerializeToElement(readUri.ToString());
+        return JsonSerializer.SerializeToElement(merged);
+    }
+
+    private static string BuildWindowsMarketplacePostInstallScript(JsonElement inputs)
+    {
+        var script = new StringBuilder();
+        script.AppendLine("$ProgressPreference = 'SilentlyContinue'");
+        script.AppendLine("$ErrorActionPreference = 'Stop'");
+        script.AppendLine("try {");
+        script.AppendLine("  try {");
+        script.AppendLine("    $cfg = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.ServerAddresses -and $_.ServerAddresses.Count -gt 0 } | Select-Object -First 1");
+        script.AppendLine("    if ($null -ne $cfg) {");
+        script.AppendLine("      $dns = @($cfg.ServerAddresses) + @('8.8.8.8','1.1.1.1') | Select-Object -Unique");
+        script.AppendLine("      Set-DnsClientServerAddress -InterfaceIndex $cfg.InterfaceIndex -ServerAddresses $dns -ErrorAction Stop");
+        script.AppendLine("    }");
+        script.AppendLine("  } catch {");
+        script.AppendLine("    [Console]::WriteLine('DNS pre-check skipped: ' + $_.Exception.Message)");
+        script.AppendLine("  }");
+        script.AppendLine("  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12");
+        script.AppendLine("  Set-ExecutionPolicy Bypass -Scope Process -Force");
+
+        if (inputs.TryGetProperty("chocolatey_packages", out var chocolateyPackagesElement)
+            && chocolateyPackagesElement.ValueKind == JsonValueKind.Array
+            && chocolateyPackagesElement.GetArrayLength() > 0)
+        {
+            script.AppendLine("  iex ((New-Object Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))");
+
+            foreach (var packageElement in chocolateyPackagesElement.EnumerateArray())
+            {
+                if (packageElement.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var packageName = packageElement.GetString();
+                if (string.IsNullOrWhiteSpace(packageName))
+                {
+                    continue;
+                }
+
+                script.AppendLine($"  choco install {packageName} -y --no-progress --fail-on-error");
+            }
+        }
+
+        if (inputs.TryGetProperty("software_package_catalog_packages", out var catalogPackagesElement)
+            && catalogPackagesElement.ValueKind == JsonValueKind.Array
+            && catalogPackagesElement.GetArrayLength() > 0)
+        {
+            script.AppendLine("  $packageInstallTimeoutSeconds = 1800");
+            script.AppendLine("  $runId = [Guid]::NewGuid().ToString('N')");
+            script.AppendLine("  $packageWorkspaceRoot = Join-Path $env:TEMP ('azss-packages-' + $runId)");
+            script.AppendLine("  New-Item -ItemType Directory -Path $packageWorkspaceRoot -Force | Out-Null");
+            script.AppendLine("  $catalogPackages = @'");
+            script.AppendLine(catalogPackagesElement.GetRawText());
+            script.AppendLine("'@ | ConvertFrom-Json");
+            script.AppendLine("  foreach ($package in $catalogPackages) {");
+            script.AppendLine("    $safePackageId = ($package.package_id -replace '[^A-Za-z0-9._-]', '_')");
+            script.AppendLine("    $packageRunRoot = Join-Path $packageWorkspaceRoot ($safePackageId + '-' + $package.version)");
+            script.AppendLine("    $downloadPath = $packageRunRoot + '.zip'");
+            script.AppendLine("    $extractPath = Join-Path $packageRunRoot 'extract'");
+            script.AppendLine("    if (Test-Path -LiteralPath $downloadPath) { Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue }");
+            script.AppendLine("    if (Test-Path -LiteralPath $packageRunRoot) { Remove-Item -LiteralPath $packageRunRoot -Recurse -Force -ErrorAction SilentlyContinue }");
+            script.AppendLine("    New-Item -ItemType Directory -Path $packageRunRoot -Force | Out-Null");
+            script.AppendLine("    if ($package.PSObject.Properties.Name -contains 'download_url' -and -not [string]::IsNullOrWhiteSpace($package.download_url)) {");
+            script.AppendLine("      Invoke-WebRequest -Uri $package.download_url -OutFile $downloadPath -ErrorAction Stop");
+            script.AppendLine("    } else {");
+            script.AppendLine("      $token = (Invoke-RestMethod 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://storage.azure.com/' -Headers @{Metadata='true'}).access_token");
+            script.AppendLine($"      $blobUrl = 'https://{DefaultSoftwareStorageAccountName}.blob.core.windows.net/{DefaultSoftwareStorageContainerName}/' + $package.blob_path");
+            script.AppendLine("      Invoke-WebRequest -Uri $blobUrl -Headers @{Authorization=\"Bearer $token\"; 'x-ms-version' = '2020-04-08'} -OutFile $downloadPath -ErrorAction Stop");
+            script.AppendLine("    }");
+            script.AppendLine("    Expand-Archive -Path $downloadPath -DestinationPath $extractPath -Force");
+            script.AppendLine("    if ($package.package_id -eq 'winscp.winscp') {");
+            script.AppendLine("      $winscpInstallerPath = Get-ChildItem -LiteralPath (Join-Path $extractPath 'payload') -Filter '*-Setup.exe' | Select-Object -First 1 -ExpandProperty FullName");
+            script.AppendLine("      if ([string]::IsNullOrWhiteSpace($winscpInstallerPath)) { throw 'WinSCP setup executable not found in payload folder.' }");
+            script.AppendLine("      $winscpLogPath = Join-Path $env:TEMP ('winscp-install-' + $package.version + '.log')");
+            script.AppendLine("      $winscpArgs = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS /LOG=' + $winscpLogPath");
+            script.AppendLine("      $installProcess = Start-Process -FilePath $winscpInstallerPath -ArgumentList $winscpArgs -PassThru -WindowStyle Hidden");
+            script.AppendLine("    } else {");
+            script.AppendLine("      $installScriptPath = Join-Path $extractPath 'scripts/install.ps1'");
+            script.AppendLine("      $installProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File', $installScriptPath) -PassThru -WindowStyle Hidden");
+            script.AppendLine("    }");
+            script.AppendLine("    if (-not $installProcess.WaitForExit($packageInstallTimeoutSeconds * 1000)) {");
+            script.AppendLine("      try { taskkill /PID $installProcess.Id /T /F | Out-Null } catch { } ");
+            script.AppendLine("      throw ('Package install timed out for ' + $package.package_id + ' ' + $package.version + ' after ' + $packageInstallTimeoutSeconds + ' seconds.')");
+            script.AppendLine("    }");
+            script.AppendLine("    if ($installProcess.ExitCode -ne 0) {");
+            script.AppendLine("      throw ('Package install failed for ' + $package.package_id + ' ' + $package.version + ' with exit code ' + $installProcess.ExitCode + '.')");
+            script.AppendLine("    }");
+            script.AppendLine("  }");
+            script.AppendLine("  if (Test-Path -LiteralPath $packageWorkspaceRoot) { Remove-Item -LiteralPath $packageWorkspaceRoot -Recurse -Force -ErrorAction SilentlyContinue }");
+        }
+
+        script.AppendLine("} catch {");
+        script.AppendLine("  [Console]::Error.WriteLine($_.Exception.Message)");
+        script.AppendLine("  exit 1");
+        script.AppendLine("}");
+
+        return script.ToString();
+    }
+
+    private static bool IsNullOrWhitespaceString(JsonElement value)
+    {
+        return value.ValueKind == JsonValueKind.Null
+            || (value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString()));
+    }
+
     private static bool IsKeyVaultModuleName(string moduleName)
     {
         if (string.IsNullOrWhiteSpace(moduleName))
@@ -1129,6 +1414,17 @@ public sealed class DeploymentsController(
 
         var normalized = Regex.Replace(moduleName, "[^a-z0-9]", string.Empty, RegexOptions.IgnoreCase);
         return normalized.Contains("virtualnetwork", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsWindowsServerModuleName(string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName))
+        {
+            return false;
+        }
+
+        var normalized = Regex.Replace(moduleName, "[^a-z0-9]", string.Empty, RegexOptions.IgnoreCase);
+        return normalized.Contains("windowsserver", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ValidateInputsAgainstSchema(string? schemaJson, JsonElement inputs)
@@ -1248,8 +1544,16 @@ public sealed class DeploymentsController(
             return BadRequest(new { message = "Deployment has no Terraform state path — cannot retry." });
 
         // Validate the corrected inputs against the module schema.
-        var effectiveInputs = EnsureModuleDefaultInputs(failed.Module.Name, request.Inputs, 
+        var effectiveInputs = EnsureModuleDefaultInputs(failed.Module.Name, request.Inputs,
             await dbContext.Customers.SingleAsync(x => x.Id == customerId, cancellationToken));
+        try
+        {
+            effectiveInputs = await InjectSoftwarePackageCatalogPackagesAsync(failed.Module.Name, effectiveInputs, customerId, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
 
         var schemaJson = failed.Module.Schema;
         if (allowedRegionCatalogService is not null)
@@ -1467,6 +1771,25 @@ public sealed class DeploymentsController(
             .Where(x => !x.Key.StartsWith("__", StringComparison.Ordinal))
             .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
 
+        try
+        {
+            var cleanEffectiveInputs = await InjectSoftwarePackageCatalogPackagesAsync(
+                target.Module.Name,
+                JsonSerializer.SerializeToElement(cleanedPayload),
+                customerId,
+                cancellationToken);
+
+            if (cleanEffectiveInputs.ValueKind == JsonValueKind.Object)
+            {
+                cleanedPayload = cleanEffectiveInputs.EnumerateObject()
+                    .ToDictionary(x => x.Name, x => x.Value.Clone(), StringComparer.Ordinal);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         var destroyPayload = new Dictionary<string, JsonElement>(cleanedPayload, StringComparer.Ordinal)
         {
             ["__operation"] = JsonSerializer.SerializeToElement("destroy"),
@@ -1612,6 +1935,24 @@ public sealed class DeploymentsController(
             var sourcePayload = sourceJson.ValueKind == JsonValueKind.Object
                 ? sourceJson.EnumerateObject().Where(x => !x.Name.StartsWith("__", StringComparison.Ordinal)).ToDictionary(x => x.Name, x => x.Value.Clone(), StringComparer.Ordinal)
                 : new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            try
+            {
+                try
+                {
+                    var sourceEffectiveInputs = await InjectSoftwarePackageCatalogPackagesAsync(source.Module.Name, JsonSerializer.SerializeToElement(sourcePayload), customerId, cancellationToken);
+                    sourcePayload = sourceEffectiveInputs.ValueKind == JsonValueKind.Object
+                        ? sourceEffectiveInputs.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.Clone(), StringComparer.Ordinal)
+                        : sourcePayload;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return BadRequest(new { message = ex.Message });
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
 
             var destroyPayload = new Dictionary<string, JsonElement>(sourcePayload, StringComparer.Ordinal)
             {
@@ -1670,6 +2011,24 @@ public sealed class DeploymentsController(
             var cleanPayload = sourceJson.ValueKind == JsonValueKind.Object
                 ? sourceJson.EnumerateObject().Where(x => !x.Name.StartsWith("__", StringComparison.Ordinal)).ToDictionary(x => x.Name, x => x.Value.Clone(), StringComparer.Ordinal)
                 : new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            try
+            {
+                try
+                {
+                    var cleanEffectiveInputs = await InjectSoftwarePackageCatalogPackagesAsync(source.Module.Name, JsonSerializer.SerializeToElement(cleanPayload), customerId, cancellationToken);
+                    cleanPayload = cleanEffectiveInputs.ValueKind == JsonValueKind.Object
+                        ? cleanEffectiveInputs.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.Clone(), StringComparer.Ordinal)
+                        : cleanPayload;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return BadRequest(new { message = ex.Message });
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
 
             var redeployDeployment = new DeploymentEntity
             {
@@ -1912,43 +2271,43 @@ public sealed class DeploymentsController(
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-            {
-                builder.Append('{');
-                var first = true;
-                foreach (var property in element.EnumerateObject().OrderBy(x => x.Name, StringComparer.Ordinal))
                 {
-                    if (!first)
+                    builder.Append('{');
+                    var first = true;
+                    foreach (var property in element.EnumerateObject().OrderBy(x => x.Name, StringComparer.Ordinal))
                     {
-                        builder.Append(',');
+                        if (!first)
+                        {
+                            builder.Append(',');
+                        }
+
+                        first = false;
+                        builder.Append(JsonSerializer.Serialize(property.Name));
+                        builder.Append(':');
+                        AppendCanonicalJson(property.Value, builder);
                     }
 
-                    first = false;
-                    builder.Append(JsonSerializer.Serialize(property.Name));
-                    builder.Append(':');
-                    AppendCanonicalJson(property.Value, builder);
+                    builder.Append('}');
+                    break;
                 }
-
-                builder.Append('}');
-                break;
-            }
             case JsonValueKind.Array:
-            {
-                builder.Append('[');
-                var first = true;
-                foreach (var item in element.EnumerateArray())
                 {
-                    if (!first)
+                    builder.Append('[');
+                    var first = true;
+                    foreach (var item in element.EnumerateArray())
                     {
-                        builder.Append(',');
+                        if (!first)
+                        {
+                            builder.Append(',');
+                        }
+
+                        first = false;
+                        AppendCanonicalJson(item, builder);
                     }
 
-                    first = false;
-                    AppendCanonicalJson(item, builder);
+                    builder.Append(']');
+                    break;
                 }
-
-                builder.Append(']');
-                break;
-            }
             default:
                 builder.Append(element.GetRawText());
                 break;

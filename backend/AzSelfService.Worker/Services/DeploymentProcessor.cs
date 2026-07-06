@@ -117,6 +117,8 @@ public sealed class DeploymentProcessor(
 
         var now = DateTime.UtcNow;
         deployment.Status = "RUNNING";
+        // Clear stale failure text from prior attempts so the UI reflects live progress.
+        deployment.ErrorMessage = null;
         deployment.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
 

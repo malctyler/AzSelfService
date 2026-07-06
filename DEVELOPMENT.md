@@ -240,6 +240,39 @@ For repeatable local setup using CLIXML and `.env`, see:
 
 - [Local Key Vault Development Runbook](docs/architecture/local-keyvault-dev-runbook.md)
 
+### Software Package Library
+
+The software storage account (`azselfservicesoftware01`) and `packages` container are used for installable package archives.
+
+- Convention doc: [Software Package Convention](docs/architecture/software-package-convention.md)
+
+Create a package zip from an installer:
+
+```powershell
+.\scripts\new-software-package.ps1 `
+  -PackageId 'igorpavlov.7zip' `
+  -VendorSlug 'igorpavlov' `
+  -ProductSlug '7zip' `
+  -Version '24.09.0' `
+  -InstallerPath '.\software-packages\downloads\7z2409-x64.msi' `
+  -InstallerType 'msi' `
+  -DetectPath 'C:\Program Files\7-Zip\7z.exe' `
+  -Publisher 'Igor Pavlov' `
+  -DisplayName '7-Zip'
+```
+
+Publish the zip to the package catalog:
+
+```powershell
+.\scripts\publish-software-package.ps1 `
+  -ZipPath '.\software-packages\igorpavlov-7zip-24.09.0-windows-x64-msi.zip' `
+  -PackageId 'igorpavlov.7zip' `
+  -Version '24.09.0' `
+  -StorageAccountName 'azselfservicesoftware01' `
+  -ContainerName 'packages' `
+  -Scope 'platform'
+```
+
 ### Device Move Recovery
 
 If you switch machines, use the rehydration script to recreate the CLIXML credential, refresh `.env`, upload the customer secret, and patch the active customer row.

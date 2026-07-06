@@ -97,6 +97,36 @@ variable "chocolatey_packages" {
   default     = []
 }
 
+variable "software_package_ids" {
+  description = "Catalog software package IDs selected in AzSelfService (for example [\"igorpavlov.7zip\"]). These IDs are resolved by the deployment backend into catalog ZIP metadata."
+  type        = list(string)
+  default     = []
+}
+
+variable "software_package_catalog_packages" {
+  description = "Resolved catalog package metadata injected by AzSelfService for each selected software_package_id."
+  type = list(object({
+    package_id   = string
+    display_name = string
+    version      = string
+    blob_path    = string
+    zip_sha256   = string
+  }))
+  default = []
+}
+
+variable "software_storage_account_name" {
+  description = "Storage account that hosts the software package catalog zips."
+  type        = string
+  default     = "azselfservicesoftware01"
+}
+
+variable "software_storage_container_name" {
+  description = "Container that hosts the software package catalog zips."
+  type        = string
+  default     = "packages"
+}
+
 variable "post_install_script_uri" {
   description = "HTTPS URI of a PowerShell .ps1 script to download and execute. For private Azure Blob Storage, use a User Delegation SAS URL (no key required) or enable post_install_use_managed_identity and assign Storage Blob Data Reader to the vm_principal_id output."
   type        = string

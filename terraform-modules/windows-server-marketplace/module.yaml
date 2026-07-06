@@ -95,7 +95,13 @@ variables:
     type: "array"
     required: false
     default: []
-    description: "Chocolatey package IDs to install after provisioning (e.g. adobereader, 7zip, googlechrome). Browse packages at chocolatey.org/packages."
+    description: "Chocolatey package IDs to install after provisioning (e.g. adobereader, 7zip, googlechrome). You can use these together with catalog packages."
+
+  - name: "software_package_ids"
+    type: "array"
+    required: false
+    default: []
+    description: "Software package IDs from the AzSelfService catalog (for example igorpavlov.7zip). These install the catalog ZIP contents, not Chocolatey packages. You can use these together with Chocolatey packages."
 
   - name: "post_install_script_uri"
     type: "string"
@@ -247,7 +253,13 @@ ui_schema:
           label: "Software Packages"
           component: "tag-input"
           placeholder: "e.g. adobereader"
-          help: "Chocolatey package IDs to install after provisioning. Leave blank to skip. Browse available packages at https://community.chocolatey.org/packages — common examples: adobereader, 7zip, googlechrome, vscode, notepadplusplus."
+          help: "Chocolatey package IDs to install after provisioning. Leave blank to skip. Browse available packages at https://community.chocolatey.org/packages — common examples: adobereader, 7zip, googlechrome, vscode, notepadplusplus. You can combine these with catalog packages below."
+
+        - name: "software_package_ids"
+          label: "Catalog Software Packages"
+          component: "tag-input"
+          placeholder: "e.g. igorpavlov.7zip"
+          help: "Select package IDs from the AzSelfService software catalog. These install the catalog ZIP contents instead of Chocolatey packages. You can combine these with Chocolatey packages above."
 
         - name: "post_install_script_uri"
           label: "Custom Script URI"

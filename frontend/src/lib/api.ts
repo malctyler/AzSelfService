@@ -480,3 +480,110 @@ export const createStorageAccount = async (storageAccount: Omit<StorageAccount, 
   const response = await axios.post<StorageAccount>('/api/storageaccounts', storageAccount);
   return response.data;
 };
+
+export type SoftwarePackageValidationResponse = {
+  isValid: boolean
+  packageId?: string
+  version?: string
+  errors: string[]
+}
+
+export type SoftwarePackageCatalogItem = {
+  id: string
+  scope: string
+  customerId?: string
+  packageId: string
+  version: string
+  displayName: string
+  publisher: string
+  os: string
+  architecture: string
+  installerType: string
+  blobPath: string
+  zipSha256: string
+  isPublished: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export async function getSoftwarePackagesForDeployment(scope?: 'platform' | 'customer' | 'all'): Promise<SoftwarePackageCatalogItem[]> {
+  const response = await apiClient.get<SoftwarePackageCatalogItem[]>('/api/software-packages', {
+    params: {
+      scope
+    }
+  })
+  return response.data
+}
+
+export type UploadSoftwarePackageRequest = {
+  scope: 'platform' | 'customer'
+  storageAccountName: string
+  containerName: string
+  isPublished: boolean
+  packageFile: File
+  customerId?: string
+}
+
+export async function validateSoftwarePackage(packageFile: File): Promise<SoftwarePackageValidationResponse> {
+  const formData = new FormData()
+  formData.append('PackageFile', packageFile)
+
+  const response = await apiClient.post<SoftwarePackageValidationResponse>('/api/admin/software-packages/validate', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+
+  return response.data
+}
+
+export async function uploadSoftwarePackage(request: UploadSoftwarePackageRequest): Promise<SoftwarePackageCatalogItem> {
+  const formData = new FormData()
+  formData.append('scope', request.scope)
+  formData.append('storageAccountName', request.storageAccountName)
+  formData.append('containerName', request.containerName)
+  formData.append('isPublished', request.isPublished ? 'true' : 'false')
+  formData.append('PackageFile', request.packageFile)
+  if (request.customerId) {
+    formData.append('customerId', request.customerId)
+  }
+
+  const response = await apiClient.post<SoftwarePackageCatalogItem>('/api/admin/software-packages/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+
+  return response.data
+}
+
+export type PublishSoftwarePackageRequest = {
+  scope: 'platform' | 'customer'
+  customerId?: string
+  packageId: string
+  version: string
+  displayName: string
+  publisher: string
+  os: string
+  architecture: string
+  installerType: string
+  blobPath: string
+  zipSha256: string
+  manifestJson?: string
+  isPublished: boolean
+}
+
+export async function publishSoftwarePackage(request: PublishSoftwarePackageRequest): Promise<SoftwarePackageCatalogItem> {
+  const response = await apiClient.post<SoftwarePackageCatalogItem>('/api/admin/software-packages/publish', request)
+  return response.data
+}
+
+export async function getSoftwarePackageCatalog(scope?: 'platform' | 'customer', customerId?: string): Promise<SoftwarePackageCatalogItem[]> {
+  const response = await apiClient.get<SoftwarePackageCatalogItem[]>('/api/admin/software-packages', {
+    params: {
+      scope,
+      customerId
+    }
+  })
+  return response.data
+}

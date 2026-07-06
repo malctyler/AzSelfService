@@ -29,8 +29,11 @@ locals {
   domain_join_enabled = trimspace(var.domain_name) != ""
 
   # Post-install is triggered by a non-empty package list OR an external script URI.
-  use_script_uri       = trimspace(var.post_install_script_uri) != ""
-  post_install_enabled = local.use_script_uri || length(var.chocolatey_packages) > 0
+  use_script_uri               = trimspace(var.post_install_script_uri) != ""
+  selected_chocolatey_packages = var.chocolatey_packages
+  selected_catalog_packages    = var.software_package_catalog_packages
+  use_chocolatey               = length(local.selected_chocolatey_packages) > 0
+  post_install_enabled         = local.use_script_uri || length(local.selected_chocolatey_packages) > 0 || length(local.selected_catalog_packages) > 0
 
   # When true, the VM's system-assigned managed identity fetches the script blob
   # via an IMDS bearer token — no storage account key required.
@@ -38,8 +41,10 @@ locals {
   use_mi_download = var.post_install_use_managed_identity == "true" && local.use_script_uri
 
   # Strip query-string before extracting filename for commandToExecute (SAS mode).
-  script_uri_path     = local.use_script_uri ? split("?", var.post_install_script_uri)[0] : ""
-  script_uri_filename = local.use_script_uri ? basename(local.script_uri_path) : ""
+  script_uri_path          = local.use_script_uri ? split("?", var.post_install_script_uri)[0] : ""
+  script_uri_parts         = local.use_script_uri ? split("/", local.script_uri_path) : []
+  script_uri_relative_path = local.use_script_uri && length(local.script_uri_parts) > 4 ? join("/", slice(local.script_uri_parts, 4, length(local.script_uri_parts))) : ""
+  script_uri_filename      = local.use_script_uri ? basename(local.script_uri_path) : ""
 
   # Inline Chocolatey script with strict error handling.
   # $ErrorActionPreference = 'Stop' + try/catch ensures a non-zero exit code is
@@ -66,9 +71,38 @@ locals {
       "  }",
       "  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12",
       "  Set-ExecutionPolicy Bypass -Scope Process -Force",
-      "  iex ((New-Object Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))",
     ],
-    [for pkg in var.chocolatey_packages : "  choco install ${pkg} -y --no-progress --fail-on-error"],
+    local.use_chocolatey ? [
+      "  iex ((New-Object Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))",
+    ] : [],
+    [for pkg in local.selected_chocolatey_packages : "  choco install ${pkg} -y --no-progress --fail-on-error"],
+    length(local.selected_catalog_packages) > 0 ? [
+      "  $runId = [Guid]::NewGuid().ToString('N')",
+      "  $packageWorkspaceRoot = Join-Path $env:TEMP ('azss-packages-' + $runId)",
+      "  New-Item -ItemType Directory -Path $packageWorkspaceRoot -Force | Out-Null",
+      "  $catalogPackages = @'",
+      jsonencode(local.selected_catalog_packages),
+      "'@ | ConvertFrom-Json",
+      "  foreach ($package in $catalogPackages) {",
+      "    $safePackageId = ($package.package_id -replace '[^A-Za-z0-9._-]', '_')",
+      "    $packageRunRoot = Join-Path $packageWorkspaceRoot ($safePackageId + '-' + $package.version)",
+      "    $downloadPath = $packageRunRoot + '.zip'",
+      "    $extractPath = Join-Path $packageRunRoot 'extract'",
+      "    if (Test-Path -LiteralPath $downloadPath) { Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue }",
+      "    if (Test-Path -LiteralPath $packageRunRoot) { Remove-Item -LiteralPath $packageRunRoot -Recurse -Force -ErrorAction SilentlyContinue }",
+      "    New-Item -ItemType Directory -Path $packageRunRoot -Force | Out-Null",
+      "    if ($package.PSObject.Properties.Name -contains 'download_url' -and -not [string]::IsNullOrWhiteSpace($package.download_url)) {",
+      "      Invoke-WebRequest -Uri $package.download_url -OutFile $downloadPath -ErrorAction Stop",
+      "    } else {",
+      "      $token = (Invoke-RestMethod 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://storage.azure.com/' -Headers @{Metadata='true'}).access_token",
+      "      $blobUrl = 'https://${var.software_storage_account_name}.blob.core.windows.net/${var.software_storage_container_name}/' + $package.blob_path",
+      "      Invoke-WebRequest -Uri $blobUrl -Headers @{Authorization=\"Bearer $$token\"; 'x-ms-version' = '2020-04-08'} -OutFile $downloadPath -ErrorAction Stop",
+      "    }",
+      "    Expand-Archive -Path $downloadPath -DestinationPath $extractPath -Force",
+      "    & (Join-Path $extractPath 'scripts/install.ps1')",
+      "  }",
+      "  if (Test-Path -LiteralPath $packageWorkspaceRoot) { Remove-Item -LiteralPath $packageWorkspaceRoot -Recurse -Force -ErrorAction SilentlyContinue }",
+    ] : [],
     [
       "} catch {",
       "  [Console]::Error.WriteLine($_.Exception.Message)",
@@ -120,7 +154,7 @@ locals {
     local.use_script_uri && !local.use_mi_download
     ? jsonencode({
       fileUris         = [var.post_install_script_uri]
-      commandToExecute = "powershell -ExecutionPolicy Unrestricted -NonInteractive -File ${local.script_uri_filename}"
+      commandToExecute = "powershell -ExecutionPolicy Unrestricted -NonInteractive -File ./${local.script_uri_relative_path}"
     })
     : jsonencode({
       commandToExecute = local.cse_inline_command

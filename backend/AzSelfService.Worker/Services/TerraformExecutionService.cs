@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Azure.Core;
+using Azure.Identity;
 using AzSelfService.Worker.Data.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -168,6 +171,13 @@ public sealed class TerraformExecutionService(
             executionModulePath,
             credentials,
             replaceResources,
+            writeLogAsync,
+            cancellationToken);
+
+        await VerifyVmExtensionHealthAsync(
+            deployment,
+            executionModulePath,
+            credentials,
             writeLogAsync,
             cancellationToken);
 
@@ -739,6 +749,153 @@ public sealed class TerraformExecutionService(
         }
 
         return stdout.ToString();
+    }
+
+    private async Task VerifyVmExtensionHealthAsync(
+        DeploymentEntity deployment,
+        string workingDirectory,
+        ServicePrincipalCredentials credentials,
+        Func<string, string, object?, CancellationToken, Task> writeLogAsync,
+        CancellationToken cancellationToken)
+    {
+        var stateList = await RunTerraformCommandAsync(
+            "state list -no-color",
+            workingDirectory,
+            credentials,
+            writeLogAsync,
+            cancellationToken,
+            logOutput: false);
+
+        var extensionAddresses = SplitLines(stateList)
+            .Select(x => x.Trim())
+            .Where(x => x.Contains("virtual_machine_extension", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (extensionAddresses.Count == 0)
+        {
+            return;
+        }
+
+        await writeLogAsync("INFO", "Verifying Azure VM extension provisioning health after terraform apply.", new
+        {
+            extensionCount = extensionAddresses.Count
+        }, cancellationToken);
+
+        foreach (var extensionAddress in extensionAddresses)
+        {
+            var stateShow = await RunTerraformCommandAsync(
+                $"state show -no-color \"{extensionAddress}\"",
+                workingDirectory,
+                credentials,
+                writeLogAsync,
+                cancellationToken,
+                logOutput: false);
+
+            var resourceId = ParseStateResourceId(stateShow);
+            if (string.IsNullOrWhiteSpace(resourceId))
+            {
+                await writeLogAsync("WARN", $"Skipping extension health check for '{extensionAddress}' because state did not include an Azure resource id.", null, cancellationToken);
+                continue;
+            }
+
+            var extensionHealth = await GetExtensionProvisioningHealthAsync(resourceId, credentials, cancellationToken);
+            if (string.Equals(extensionHealth.ProvisioningState, "Failed", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Azure VM extension '{extensionAddress}' is in Failed state after apply. " +
+                    $"ResourceId: {resourceId}. Details: {extensionHealth.Details}");
+            }
+
+            await writeLogAsync("INFO", $"Extension '{extensionAddress}' health check passed.", new
+            {
+                resourceId,
+                provisioningState = extensionHealth.ProvisioningState,
+                details = extensionHealth.Details
+            }, cancellationToken);
+        }
+    }
+
+    private static string? ParseStateResourceId(string stateShowOutput)
+    {
+        foreach (var line in SplitLines(stateShowOutput))
+        {
+            var trimmed = line.Trim();
+            var match = Regex.Match(trimmed, "^id\\s*=\\s*\"?(?<id>.+?)\"?$", RegexOptions.CultureInvariant);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var id = match.Groups["id"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(id) && id.StartsWith("/subscriptions/", StringComparison.OrdinalIgnoreCase))
+            {
+                return id;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<(string? ProvisioningState, string? Details)> GetExtensionProvisioningHealthAsync(
+        string resourceId,
+        ServicePrincipalCredentials credentials,
+        CancellationToken cancellationToken)
+    {
+        var credential = new ClientSecretCredential(credentials.TenantId, credentials.ClientId, credentials.ClientSecret);
+        var token = await credential.GetTokenAsync(
+            new TokenRequestContext(["https://management.azure.com/.default"]),
+            cancellationToken);
+
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+
+        var requestUri = $"https://management.azure.com{resourceId}?$expand=instanceView&api-version=2024-03-01";
+        using var response = await httpClient.GetAsync(requestUri, cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(content);
+        var root = document.RootElement;
+        var properties = root.TryGetProperty("properties", out var propertiesElement)
+            ? propertiesElement
+            : default;
+
+        var provisioningState = properties.ValueKind == JsonValueKind.Object
+            && properties.TryGetProperty("provisioningState", out var stateElement)
+            && stateElement.ValueKind == JsonValueKind.String
+            ? stateElement.GetString()
+            : null;
+
+        string? details = null;
+        if (properties.ValueKind == JsonValueKind.Object
+            && properties.TryGetProperty("instanceView", out var instanceView)
+            && instanceView.ValueKind == JsonValueKind.Object
+            && instanceView.TryGetProperty("statuses", out var statuses)
+            && statuses.ValueKind == JsonValueKind.Array)
+        {
+            var statusMessages = statuses.EnumerateArray()
+                .Select(status =>
+                {
+                    var code = status.TryGetProperty("code", out var codeElement) && codeElement.ValueKind == JsonValueKind.String
+                        ? codeElement.GetString()
+                        : null;
+                    var message = status.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.String
+                        ? messageElement.GetString()
+                        : null;
+                    return string.IsNullOrWhiteSpace(message)
+                        ? code
+                        : $"{code}: {message}";
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+
+            if (statusMessages.Count > 0)
+            {
+                details = string.Join(" | ", statusMessages);
+            }
+        }
+
+        return (provisioningState, details);
     }
 
     private static void CopyDirectory(string sourcePath, string destinationPath)

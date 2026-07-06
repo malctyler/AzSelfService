@@ -70,7 +70,7 @@ This document defines how Terraform modules are safely and auditably executed, h
 │ 3. Run: terraform init -backend-config=...                      │
 │ 4. Run: terraform apply -auto-approve                           │
 │ 5. Stream stdout/stderr to deployment_logs table                │
-│ 6. Frontend polls GET /api/deployments/{id}/logs, displays logs │
+│ 6. Frontend polls GET /api/deployments/{id}/logs, displays persisted logs │
 └────────────────┬────────────────────────────────────────────────┘
                  │
                  ▼
@@ -258,6 +258,10 @@ Worker stores in deployment_outputs table:
 API: GET /api/deployments/{id}/outputs
         ↓
 Frontend displays outputs to user
+
+## UI Update Model
+
+The current implementation does not push live log events over a socket or stream. The UI reads deployment state and deployment log rows from the API and refreshes them by polling.
 ```
 
 ---
