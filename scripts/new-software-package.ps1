@@ -152,27 +152,27 @@ else {
 }
 
 $manifest = [ordered]@{
-    packageId         = $PackageId
-    displayName       = $DisplayName
-    version           = $Version
-    publisher         = $Publisher
-    os                = $Os
-    architecture      = $Architecture
-    installerType     = $InstallerType
-    entrypoint        = 'scripts/install.ps1'
-    installCommand    = $installCommand
-    silentArgs        = $SilentArgs
-    silentInstallArgsTested = $true
+    packageId                   = $PackageId
+    displayName                 = $DisplayName
+    version                     = $Version
+    publisher                   = $Publisher
+    os                          = $Os
+    architecture                = $Architecture
+    installerType               = $InstallerType
+    entrypoint                  = 'scripts/install.ps1'
+    installCommand              = $installCommand
+    silentArgs                  = $SilentArgs
+    silentInstallArgsTested     = $true
     rebootSuppressionArgsTested = $true
-    expectedExitCodes = @(0, 3010)
-    rebootBehavior    = 'possible'
-    detectionRules    = @(
+    expectedExitCodes           = @(0, 3010)
+    rebootBehavior              = 'possible'
+    detectionRules              = @(
         [ordered]@{
             type = 'fileExists'
             path = $DetectPath
         }
     )
-    artifacts         = @(
+    artifacts                   = @(
         [ordered]@{
             path   = "payload/$installerFileName"
             sha256 = $installerSha

@@ -282,7 +282,7 @@ public sealed class TerraformExecutionService(
         foreach (Match match in matches)
         {
             var resourceId = match.Groups[1].Value.Trim();
-            var address    = match.Groups[2].Value.Trim();
+            var address = match.Groups[2].Value.Trim();
             if (!string.IsNullOrWhiteSpace(resourceId) && !string.IsNullOrWhiteSpace(address))
             {
                 results.Add((address, resourceId));
@@ -457,7 +457,8 @@ public sealed class TerraformExecutionService(
         }
     }
 
-    private static IReadOnlyList<(string Address, string ResourceId)> ExtractImportBlocks(string? inputsJson)    {
+    private static IReadOnlyList<(string Address, string ResourceId)> ExtractImportBlocks(string? inputsJson)
+    {
         if (string.IsNullOrWhiteSpace(inputsJson))
             return Array.Empty<(string, string)>();
 
@@ -694,10 +695,10 @@ public sealed class TerraformExecutionService(
         process.StartInfo.Environment["ARM_TENANT_ID"] = credentials.TenantId;
         process.StartInfo.Environment["ARM_SUBSCRIPTION_ID"] = credentials.SubscriptionId;
         process.StartInfo.Environment["ARM_USE_AZUREAD"] = "true";
-        
+
         // Terraform automation mode
         process.StartInfo.Environment["TF_IN_AUTOMATION"] = "1";
-        
+
         // Note: Backend authentication (access_key or sas_token) is passed via init backend-config args.
         // This ensures backend state access uses platform credentials, not customer SP credentials.
 
