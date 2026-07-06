@@ -146,3 +146,20 @@ id_rsa
 id_rsa.pub
 authorized_keys
 
+## Software Package Artifacts (local only, never commit)
+software-packages/downloads/
+software-packages/*.zip
+software-packages/**/*.zip
+software-packages/**/*.exe
+software-packages/**/*.msi
+software-packages/**/*.msix
+software-packages/**/*.msp
+software-packages/**/*.cab
+software-packages/**/*.iso
+software-packages/**/*.7z
+software-packages/**/*.tar
+software-packages/**/*.tar.gz
+software-packages/**/*.tgz
+software-packages/**/*.nupkg
+software-packages/_tmp*/
+
