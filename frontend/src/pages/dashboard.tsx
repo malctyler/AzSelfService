@@ -54,10 +54,11 @@ export default function DashboardPage() {
     : managedResources.filter((resource) => resource.status === selectedStatus)
   const rebuildableCount = managedResources.filter((resource) => resource.status === 'SUCCEEDED').length
 
-  const handleDeleteFailedDeployment = async (deploymentId: string) => {
+  const handleDeleteTerminalDeployment = async (deploymentId: string, status: string) => {
     if (deletingDeploymentId || rebuildingDeploymentId) return
 
-    const confirmed = window.confirm('Delete this failed deployment from the dashboard history? This cannot be undone.')
+    const statusLabel = status === 'ROLLED_BACK' ? 'rolled-back' : 'failed'
+    const confirmed = window.confirm(`Delete this ${statusLabel} deployment from the dashboard history? This cannot be undone.`)
     if (!confirmed) return
 
     setDeletingDeploymentId(deploymentId)
@@ -70,7 +71,7 @@ export default function DashboardPage() {
       // Remove the deleted record immediately so the UI reflects the action
       // even before any background refresh.
       setManagedResources((prev) => prev.filter((resource) => resource.deploymentId !== deploymentId))
-      setActionMessage(`Deleted failed deployment ${deploymentId}.`)
+      setActionMessage(`Deleted ${statusLabel} deployment ${deploymentId}.`)
 
       // Best-effort refresh in case the backend grouping surfaces another
       // historical record for the same state path.
@@ -237,9 +238,9 @@ export default function DashboardPage() {
                       <Link href={`/deployment/${resource.deploymentId}`}>View</Link>
                     </td>
                     <td style={{ borderBottom: '1px solid #f1f5f9', padding: '8px 6px' }}>
-                      {resource.status === 'FAILED' ? (
+                      {(resource.status === 'FAILED' || resource.status === 'ROLLED_BACK') ? (
                         <button
-                          onClick={() => handleDeleteFailedDeployment(resource.deploymentId)}
+                          onClick={() => handleDeleteTerminalDeployment(resource.deploymentId, resource.status)}
                           disabled={deletingDeploymentId === resource.deploymentId || !!rebuildingDeploymentId}
                           style={{ color: '#991b1b', border: '1px solid #fca5a5', background: '#fff1f2' }}
                         >

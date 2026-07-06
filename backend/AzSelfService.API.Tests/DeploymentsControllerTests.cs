@@ -174,6 +174,35 @@ public sealed class DeploymentsControllerTests
     }
 
     [Fact]
+    public async Task DestroyDeployment_QueuesDestroyJob_WhenDeploymentFailed()
+    {
+        var customerId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var deploymentId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        await using var db = CreateDbContext();
+        SeedCustomersUsersAndModule(db, customerId, Guid.NewGuid(), userId, Guid.NewGuid(), moduleId, deploymentId, now);
+        await db.SaveChangesAsync();
+
+        var deployment = await db.Deployments.SingleAsync(x => x.Id == deploymentId);
+        deployment.Status = "FAILED";
+        deployment.TerraformStatePath = "tfstate/customers/customer/module/state.tfstate";
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, customerId, userId);
+
+        var result = await controller.DestroyDeployment(deploymentId, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var payload = Assert.IsType<DeploymentCreatedResponse>(created.Value);
+
+        Assert.NotEqual(deploymentId, payload.Id);
+        Assert.Equal("QUEUED", payload.Status);
+    }
+
+    [Fact]
     public async Task DestroyDeployment_ReturnsNotFound_WhenDeploymentBelongsToAnotherCustomer()
     {
         var ownerCustomerId = Guid.NewGuid();
@@ -225,7 +254,32 @@ public sealed class DeploymentsControllerTests
     }
 
     [Fact]
-    public async Task DeleteFailedDeployment_ReturnsBadRequest_WhenStatusIsNotFailed()
+    public async Task DeleteFailedDeployment_RemovesDeployment_WhenRolledBack()
+    {
+        var customerId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var deploymentId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        await using var db = CreateDbContext();
+        SeedCustomersUsersAndModule(db, customerId, Guid.NewGuid(), userId, Guid.NewGuid(), moduleId, deploymentId, now);
+        await db.SaveChangesAsync();
+
+        var deployment = await db.Deployments.SingleAsync(x => x.Id == deploymentId);
+        deployment.Status = "ROLLED_BACK";
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, customerId, userId);
+
+        var result = await controller.DeleteFailedDeployment(deploymentId, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.False(await db.Deployments.AnyAsync(x => x.Id == deploymentId));
+    }
+
+    [Fact]
+    public async Task DeleteFailedDeployment_ReturnsBadRequest_WhenStatusIsNotDeletable()
     {
         var customerId = Guid.NewGuid();
         var userId = Guid.NewGuid();

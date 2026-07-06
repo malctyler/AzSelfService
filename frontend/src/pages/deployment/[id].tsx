@@ -5,6 +5,7 @@ import { destroyDeployment, getDeployment, getDeploymentLogs, retryDeployment, t
 import { useAuthStore } from '../../store/auth'
 
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'DESTROYED', 'ROLLED_BACK'])
+const DESTROYABLE_STATUSES = new Set(['SUCCEEDED', 'FAILED'])
 
 function extractRebuildLinks(logs: DeploymentLog[]): { nextDeploymentId?: string; dependsOnDeploymentId?: string } {
   for (let index = logs.length - 1; index >= 0; index -= 1) {
@@ -253,11 +254,14 @@ export default function DeploymentPage() {
   }, [deploymentId, deployment, logs, router])
 
   const triggerDestroy = async () => {
-    if (!deploymentId || !deployment || deployment.status !== 'SUCCEEDED' || isDestroying) {
+    if (!deploymentId || !deployment || !DESTROYABLE_STATUSES.has(deployment.status) || isDestroying) {
       return
     }
 
-    const confirmed = window.confirm('Queue destroy for this deployment? This will remove created resources.')
+    const confirmed = window.confirm(
+      deployment.status === 'FAILED'
+        ? 'Queue destroy for this failed deployment? This will attempt to clean up any partially created resources.'
+        : 'Queue destroy for this deployment? This will remove created resources.')
     if (!confirmed) {
       return
     }
@@ -497,10 +501,10 @@ export default function DeploymentPage() {
           </div>
         )}
 
-        {deployment?.status === 'SUCCEEDED' && (
+        {deployment && DESTROYABLE_STATUSES.has(deployment.status) && (
           <div style={{ marginTop: 14 }}>
             <button onClick={triggerDestroy} disabled={isDestroying}>
-              {isDestroying ? 'Queueing Destroy...' : 'Destroy Resources'}
+              {isDestroying ? 'Queueing Destroy...' : deployment.status === 'FAILED' ? 'Destroy Partial Resources' : 'Destroy Resources'}
             </button>
           </div>
         )}

@@ -1662,9 +1662,12 @@ public sealed class DeploymentsController(
             return NotFound(new { message = "Deployment not found." });
         }
 
-        if (!string.Equals(target.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase))
+        var canDestroy = string.Equals(target.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(target.Status, "FAILED", StringComparison.OrdinalIgnoreCase);
+
+        if (!canDestroy)
         {
-            return BadRequest(new { message = "Only succeeded deployments can be destroyed." });
+            return BadRequest(new { message = "Only succeeded or failed deployments can be destroyed." });
         }
 
         if (string.IsNullOrWhiteSpace(target.TerraformStatePath))
@@ -2095,9 +2098,12 @@ public sealed class DeploymentsController(
             return NotFound(new { message = "Deployment not found." });
         }
 
-        if (!string.Equals(target.Status, "FAILED", StringComparison.OrdinalIgnoreCase))
+        var canDelete = string.Equals(target.Status, "FAILED", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(target.Status, "ROLLED_BACK", StringComparison.OrdinalIgnoreCase);
+
+        if (!canDelete)
         {
-            return BadRequest(new { message = "Only failed deployments can be deleted." });
+            return BadRequest(new { message = "Only failed or rolled-back deployments can be deleted." });
         }
 
         dbContext.Deployments.Remove(target);
