@@ -147,6 +147,7 @@ id_rsa.pub
 authorized_keys
 
 ## Software Package Artifacts (local only, never commit)
+software-packages/
 software-packages/downloads/
 software-packages/*.zip
 software-packages/**/*.zip
